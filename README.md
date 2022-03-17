@@ -10,9 +10,11 @@ When provided with a search term, the Congressional Data Scraper will scrape the
 - Search Term
 - URL 
 
-### About the Daily Editions 
+### About the Data
 It can be confusing how many different kinds of data are produced by Congress. This section gives a high level overview of the data collected by 
 
+
+Daily Edition 
 
 Is a little complicated so 
 
