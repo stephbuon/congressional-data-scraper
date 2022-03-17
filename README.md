@@ -1,8 +1,8 @@
 # Congressional Data Scraper
 
-When provided with a search term, the Congressional Data Scraper will scrape the plain text version of the Daily Editions of the Congressional Records whose titles contain your search term. The output is a .csv file with columns for: 
+When provided with a search term, the Congressional Data Scraper will scrape the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" whose titles contain your search term. The output is a .csv file with columns for: 
   
-  - Record Name
+- Record Name
 - Page Range 
 - Date
 - Speaker Name
@@ -11,6 +11,9 @@ When provided with a search term, the Congressional Data Scraper will scrape the
 - URL 
 
 ### About the Daily Editions 
+It can be confusing how many different kinds of data are produced by Congress. This section gives a high level overview of the data collected by 
+
+
 Is a little complicated so 
 
 The Daily Edition of the Congressional Record 
