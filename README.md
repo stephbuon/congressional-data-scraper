@@ -1,17 +1,29 @@
 # Congressional Data Scraper
-
-When provided with a search term, the Congressional Data Scraper (CDS) will scrape the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" whose titles contain your search term. The output is a .csv file with columns for:
+When provided with a search term, the Congressional Data Scraper (CDS) will scrape the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" that contain your search term. The output is a .csv file with columns for:
  
 - Record Name
 - Page Range
 - Date
 - Speaker Name
-- Speech Text
+- Speech
 - Search Term
 - URL
 
 ### Usage
+CDS takes X arguments: 
 
+Date Range
+
+
+| Argument  | Definition |
+| ------------- | ------------- |
+| Search Term | Return congressional records that contain this term. Can be 1 to 2 words long. |
+| First Year  | The year   |
+| Last Year | Content Cell  |
+
+The 
+
+search term; start year; end year;
 
 Takes 
 Search term (can be one or more words) 
@@ -22,7 +34,7 @@ End Year
 
 
 ```
-
+python cds 
 
 ```
 
