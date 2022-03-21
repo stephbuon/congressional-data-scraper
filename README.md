@@ -1,5 +1,5 @@
 # Congressional Data Scraper
-When provided with a search term, the Congressional Data Scraper (CDS) will scrape the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" that contain your search term. The output is a .csv file with columns for:
+The Congressional Data Scraper (CDS) will scrape the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" that contain your search term. It outputs a .csv file with columns for:
  
 - Record Name
 - Page Range
