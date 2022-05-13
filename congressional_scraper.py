@@ -45,8 +45,6 @@ def scrape_search_results(search_term):
         tag = result.find('a')
         result_href = tag.get('href')
         scrape_record(f'{BASE_URL}{result_href}')
-        break
-
 
 def scrape_record(url):
     response = requests.get(url)
