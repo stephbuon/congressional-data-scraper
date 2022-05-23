@@ -63,6 +63,9 @@ def scrape_record(url):
     response = requests.get(url)
     page = BeautifulSoup(response.text, 'html.parser')
     txt_link_parent = page.find('li', class_='full-text-link')
+    if txt_link_parent is None:
+        print('Couldnt find text link')
+        return
     txt_link = next(txt_link_parent.children).get('href')
     print(f'Fetching record from {BASE_URL}{txt_link}...')
 
