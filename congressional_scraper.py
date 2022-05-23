@@ -1,9 +1,10 @@
 import argparse
-from typing import Optional
+from typing import Optional, List
 
 BASE_URL = 'https://congress.gov'
 SEARCH_URL = f'{BASE_URL}/search'
 PAGE_SIZE = 100
+DEFAULT_CONGRESS = list(range(105, 117 + 1))
 
 from urllib.parse import quote_plus, urlencode
 import json
@@ -17,21 +18,21 @@ import pandas as pd
 
 
 
-def create_query(search_term: str, congress: Optional[str] = None):
+def create_query(search_term: str, congress: Optional[List[str]] = None):
     q = {
         "source": "congrecord",
         "search": search_term,
     }
 
     if congress is not None:
-        q["congress"] = int(congress)
+        q["congress"] = congress
 
     return json.dumps(q)
 
 
-def scrape_search_results(search_term, page_num=1, max_results=30):
+def scrape_search_results(search_term, page_num=1, max_results=9999):
     url_params = {
-        'q': create_query(search_term),
+        'q': create_query(search_term, congress=DEFAULT_CONGRESS),
         'pageSize': PAGE_SIZE,
         'page': page_num,
     }
