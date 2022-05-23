@@ -1,6 +1,6 @@
 import re
 
-SPEAKER_REGEX = re.compile(r'(?:^  +M[rs]. [a-zA-Z]+[A-Z ]+\.)|(?:^  +The [A-Z ]+.)', re.MULTILINE)
+SPEAKER_REGEX = re.compile(r'(?:^  +M[rs]. [a-zA-Z]+[A-Z ]+\.)|(?:^  +The [A-Z ]{2,}.)', re.MULTILINE)
 
 
 def scrape(text):
