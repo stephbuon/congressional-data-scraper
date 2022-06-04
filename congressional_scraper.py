@@ -15,8 +15,10 @@ from bs4 import BeautifulSoup
 import speaker_scraper
 
 import pandas as pd
+from datetime import datetime
 
 
+# todo: ADD DATE and TITLE
 
 def create_query(search_term: str, congress: Optional[List[str]] = None):
     q = {
@@ -30,7 +32,7 @@ def create_query(search_term: str, congress: Optional[List[str]] = None):
     return json.dumps(q)
 
 
-def scrape_search_results(search_term, page_num=1, max_results=9999):
+def scrape_search_results(search_term, page_num=1, max_results=9):
     url_params = {
         'q': create_query(search_term, congress=DEFAULT_CONGRESS),
         'pageSize': PAGE_SIZE,
@@ -60,8 +62,30 @@ def scrape_search_results(search_term, page_num=1, max_results=9999):
 
 
 def scrape_record(url):
+    print('scrape_record', url)
     response = requests.get(url)
     page = BeautifulSoup(response.text, 'html.parser')
+    main_wrapper = page.find('div', class_='main-wrapper')
+
+    if main_wrapper is None:
+        print('Failed to fetch record.')
+        return
+
+    title = ''
+    date = ''
+    title_tag = main_wrapper.find('h2')
+    if title_tag:
+        title = title_tag.text
+        title = title.replace('\n', '')
+
+    subtitle_tag = main_wrapper.find('span', class_='quiet')
+
+    if subtitle_tag:
+        parts = subtitle_tag.text.split('-')
+        if len(parts) == 2:
+            date = parts[1].strip().replace(',', '').replace(')', '')
+            date = datetime.strptime(date, '%B %d %Y').strftime('%Y-%m-%d')
+
     txt_link_parent = page.find('li', class_='full-text-link')
     if txt_link_parent is None:
         print('Couldnt find text link')
@@ -72,9 +96,13 @@ def scrape_record(url):
     response = requests.get(f'{BASE_URL}{txt_link}')
     page = BeautifulSoup(response.text, 'html.parser')
 
-    record_text = page.find('pre').text
-    for match in speaker_scraper.scrape(record_text):
-        yield url, match[0], match[1]
+    record_text = page.find('pre')
+    if record_text is None:
+        print('Failed ')
+    record_text = record_text.text
+
+    for speaker, text in speaker_scraper.scrape(record_text):
+        yield url, date, title, speaker, text
 
 
 if __name__ == '__main__':
@@ -91,9 +119,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     results = []
 
-    for url, speaker, text in scrape_search_results(args.search_term):
+    for url, date, title, speaker, text in scrape_search_results(args.search_term):
         text = text.replace('\n', ' ').replace('\t', ' ')
-        results.append({"url": url, "speaker": speaker, "text": text})
+        results.append({"url": url, "date": date, "title": title, "speaker": speaker, "text": text})
 
     df = pd.DataFrame(results)
     df.set_index("url", inplace=True)
