@@ -32,7 +32,7 @@ def create_query(search_term: str, congress: Optional[List[str]] = None):
     return json.dumps(q)
 
 
-def scrape_search_results(search_term, page_num=1, max_results=9):
+def scrape_search_results(search_term, page_num=1, max_results=9999):
     url_params = {
         'q': create_query(search_term, congress=DEFAULT_CONGRESS),
         'pageSize': PAGE_SIZE,
