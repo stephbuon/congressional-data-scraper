@@ -98,7 +98,8 @@ def scrape_record(url):
 
     record_text = page.find('pre')
     if record_text is None:
-        print('Failed ')
+        print(f'Failed to find record text on link: {BASE_URL}{txt_link} . Skipping...')
+        return
     record_text = record_text.text
 
     for speaker, text in speaker_scraper.scrape(record_text):
