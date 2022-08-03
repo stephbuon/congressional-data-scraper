@@ -1,10 +1,12 @@
 import argparse
+import time
 from typing import Optional, List
 
 BASE_URL = 'https://congress.gov'
 SEARCH_URL = f'{BASE_URL}/search'
 PAGE_SIZE = 100
 DEFAULT_CONGRESS = list(range(105, 117 + 1))
+RETRY_DELAY = 3
 
 from urllib.parse import quote_plus, urlencode
 import json
@@ -61,9 +63,19 @@ def scrape_search_results(search_term, page_num=1, max_results=9999):
         yield from scrape_search_results(search_term, page_num + 1, max_results)
 
 
-def scrape_record(url):
+def scrape_record(url, retries=1):
     print('scrape_record', url)
     response = requests.get(url)
+
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        print('Failed to scrape record. Reason: ' + str(e))
+        if retries:
+            print('Retrying...')
+            time.sleep(RETRY_DELAY)
+            return scrape_record(url, retries=retries - 1)
+
     page = BeautifulSoup(response.text, 'html.parser')
     main_wrapper = page.find('div', class_='main-wrapper')
 
@@ -91,9 +103,23 @@ def scrape_record(url):
         print('Couldnt find text link')
         return
     txt_link = next(txt_link_parent.children).get('href')
+    return scrape_txt_record(txt_link, url, date, title)
+
+
+def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=1):
     print(f'Fetching record from {BASE_URL}{txt_link}...')
 
     response = requests.get(f'{BASE_URL}{txt_link}')
+
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        print('Failed to scrape TXT record link. Reason: ' + str(e))
+        if retries:
+            print('Retrying...')
+            time.sleep(RETRY_DELAY)
+            return scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
+
     page = BeautifulSoup(response.text, 'html.parser')
 
     record_text = page.find('pre')
@@ -103,7 +129,7 @@ def scrape_record(url):
     record_text = record_text.text
 
     for speaker, text in speaker_scraper.scrape(record_text):
-        yield url, date, title, speaker, text
+        yield record_url, record_date, record_title, speaker, text
 
 
 if __name__ == '__main__':
