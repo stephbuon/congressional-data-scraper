@@ -6,7 +6,6 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 - Page Range
 - Speaker Name
 - Speech
-- Search Term
 - URL
 
 ### Usage
