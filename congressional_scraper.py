@@ -93,6 +93,7 @@ def scrape_record(url, retries=1):
             else:
                 try:
                     retry_time = int(retry_time)
+                    print('Retry-After time from API is: %d', retry_time)
                 except ValueError:
                     retry_time = RETRY_DELAY
 
@@ -150,6 +151,7 @@ def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=1
             else:
                 try:
                     retry_time = int(retry_time)
+                    print('Retry-After time from API is: %d', retry_time)
                 except ValueError:
                     retry_time = RETRY_DELAY
 
