@@ -155,6 +155,10 @@ if __name__ == '__main__':
         text = text.replace('\n', ' ').replace('\t', ' ')
         results.append({"url": url, "date": date, "title": title, "speaker": speaker, "text": text})
 
+    if not results:
+        print('No results scraped. Exiting...')
+        exit()
+
     df = pd.DataFrame(results)
     df.set_index("url", inplace=True)
     df.to_csv(args.output_file, sep='|')
