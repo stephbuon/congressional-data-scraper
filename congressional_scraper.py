@@ -67,11 +67,12 @@ def scrape_search_results(search_term, page_num=1, max_results=9999, retries=1):
         if response.status_code == TOO_MANY_REQUESTS:
             retry_time = fetch_retry_time(response)
             time.sleep(retry_time)
-            return scrape_search_results(search_term, page_num=page_num, max_results=max_results, retries=retries - 1)
+            yield from scrape_search_results(search_term, page_num=page_num, max_results=max_results, retries=retries - 1)
         if retries:
             print('Retrying...')
             time.sleep(RETRY_DELAY)
-            return scrape_search_results(search_term, page_num=page_num, max_results=max_results, retries=retries - 1)
+            yield from scrape_search_results(search_term, page_num=page_num, max_results=max_results, retries=retries - 1)
+        return
 
     print('Parsing search page...')
     page = BeautifulSoup(response.text, 'html.parser')
