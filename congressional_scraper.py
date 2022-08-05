@@ -6,7 +6,9 @@ BASE_URL = 'https://congress.gov'
 SEARCH_URL = f'{BASE_URL}/search'
 PAGE_SIZE = 100
 DEFAULT_CONGRESS = list(range(105, 117 + 1))
-RETRY_DELAY = 3
+RETRY_DELAY = 10
+
+TOO_MANY_REQUESTS = 429
 
 from urllib.parse import quote_plus, urlencode
 import json
@@ -44,6 +46,14 @@ def scrape_search_results(search_term, page_num=1, max_results=9999):
     print(f'Search url: {url}')
 
     response = requests.get(url)
+
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        print('Failed to fetch initial search url. Reason: ' + str(e))
+        yield from []
+        return
+
     print('Parsing search page...')
     page = BeautifulSoup(response.text, 'html.parser')
     body = page.body
@@ -76,6 +86,19 @@ def scrape_record(url, retries=1):
         response.raise_for_status()
     except requests.HTTPError as e:
         print('Failed to scrape record. Reason: ' + str(e))
+        if response.status_code == TOO_MANY_REQUESTS:
+            retry_time = response.headers.get('Retry-After', None)
+            if retry_time is None:
+                retry_time = RETRY_DELAY
+            else:
+                try:
+                    retry_time = int(retry_time)
+                except ValueError:
+                    retry_time = RETRY_DELAY
+
+            time.sleep(retry_time)
+            return scrape_record(url, retries=retries - 1)
+
         if retries:
             print('Retrying...')
             time.sleep(RETRY_DELAY)
@@ -120,6 +143,18 @@ def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=1
         response.raise_for_status()
     except requests.HTTPError as e:
         print('Failed to scrape TXT record link. Reason: ' + str(e))
+        if response.status_code == TOO_MANY_REQUESTS:
+            retry_time = response.headers.get('Retry-After', None)
+            if retry_time is None:
+                retry_time = RETRY_DELAY
+            else:
+                try:
+                    retry_time = int(retry_time)
+                except ValueError:
+                    retry_time = RETRY_DELAY
+
+            time.sleep(retry_time)
+            return scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
         if retries:
             print('Retrying...')
             time.sleep(RETRY_DELAY)
