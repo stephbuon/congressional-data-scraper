@@ -53,7 +53,12 @@ def scrape_search_results(search_term, page_num=1, max_results=9999):
     for result in search_results:
         tag = result.find('a')
         result_href = tag.get('href')
-        yield from scrape_record(f'{BASE_URL}{result_href}')
+        try:
+            yield from scrape_record(f'{BASE_URL}{result_href}')
+        except StopIteration:
+            continue
+        except RuntimeError:
+            continue
         max_results -= 1
         if not max_results:
             break
@@ -81,7 +86,7 @@ def scrape_record(url, retries=1):
 
     if main_wrapper is None:
         print('Failed to fetch record.')
-        return
+        raise StopIteration
 
     title = ''
     date = ''
@@ -101,7 +106,7 @@ def scrape_record(url, retries=1):
     txt_link_parent = page.find('li', class_='full-text-link')
     if txt_link_parent is None:
         print('Couldnt find text link')
-        return
+        raise StopIteration
     txt_link = next(txt_link_parent.children).get('href')
     return scrape_txt_record(txt_link, url, date, title)
 
@@ -125,7 +130,7 @@ def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=1
     record_text = page.find('pre')
     if record_text is None:
         print(f'Failed to find record text on link: {BASE_URL}{txt_link} . Skipping...')
-        return
+        raise StopIteration
     record_text = record_text.text
 
     for speaker, text in speaker_scraper.scrape(record_text):
