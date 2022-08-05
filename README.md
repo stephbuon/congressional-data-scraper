@@ -7,7 +7,7 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 - Text
 - Date 
 
-### Usage
+## Usage
 
 ```
 python3 congressional_scraper.py <keyword> <output filename>
