@@ -36,7 +36,20 @@ def create_query(search_term: str, congress: Optional[List[str]] = None):
     return json.dumps(q)
 
 
-def scrape_search_results(search_term, page_num=1, max_results=9999):
+def fetch_retry_time(response: requests.Response):
+    retry_time = response.headers.get('Retry-After', None)
+    if retry_time is None:
+        retry_time = RETRY_DELAY
+    else:
+        try:
+            retry_time = int(retry_time)
+            print('Retry-After time from API is: %d' % retry_time)
+        except ValueError:
+            retry_time = RETRY_DELAY
+    return retry_time
+
+
+def scrape_search_results(search_term, page_num=1, max_results=9999, retries=1):
     url_params = {
         'q': create_query(search_term, congress=DEFAULT_CONGRESS),
         'pageSize': PAGE_SIZE,
@@ -51,8 +64,14 @@ def scrape_search_results(search_term, page_num=1, max_results=9999):
         response.raise_for_status()
     except requests.HTTPError as e:
         print('Failed to fetch initial search url. Reason: ' + str(e))
-        yield from []
-        return
+        if response.status_code == TOO_MANY_REQUESTS:
+            retry_time = fetch_retry_time(response)
+            time.sleep(retry_time)
+            return scrape_search_results(search_term, page_num=page_num, max_results=max_results, retries=retries - 1)
+        if retries:
+            print('Retrying...')
+            time.sleep(RETRY_DELAY)
+            return scrape_search_results(search_term, page_num=page_num, max_results=max_results, retries=retries - 1)
 
     print('Parsing search page...')
     page = BeautifulSoup(response.text, 'html.parser')
@@ -87,16 +106,7 @@ def scrape_record(url, retries=1):
     except requests.HTTPError as e:
         print('Failed to scrape record. Reason: ' + str(e))
         if response.status_code == TOO_MANY_REQUESTS:
-            retry_time = response.headers.get('Retry-After', None)
-            if retry_time is None:
-                retry_time = RETRY_DELAY
-            else:
-                try:
-                    retry_time = int(retry_time)
-                    print('Retry-After time from API is: %d' % retry_time)
-                except ValueError:
-                    retry_time = RETRY_DELAY
-
+            retry_time = fetch_retry_time(response)
             time.sleep(retry_time)
             return scrape_record(url, retries=retries - 1)
 
@@ -145,16 +155,7 @@ def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=1
     except requests.HTTPError as e:
         print('Failed to scrape TXT record link. Reason: ' + str(e))
         if response.status_code == TOO_MANY_REQUESTS:
-            retry_time = response.headers.get('Retry-After', None)
-            if retry_time is None:
-                retry_time = RETRY_DELAY
-            else:
-                try:
-                    retry_time = int(retry_time)
-                    print('Retry-After time from API is: %d' % retry_time)
-                except ValueError:
-                    retry_time = RETRY_DELAY
-
+            retry_time = fetch_retry_time(response)
             time.sleep(retry_time)
             return scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
         if retries:
