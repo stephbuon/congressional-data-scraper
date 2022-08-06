@@ -150,7 +150,7 @@ def scrape_record(url, retries=3):
         print('Couldnt find text link')
         raise StopIteration
     txt_link = next(txt_link_parent.children).get('href')
-    return scrape_txt_record(txt_link, url, date, title)
+    yield from scrape_txt_record(txt_link, url, date, title)
 
 
 def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=3):
