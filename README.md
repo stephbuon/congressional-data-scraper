@@ -7,7 +7,7 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 - Text
 - Date 
 
-CDS will write to the output file before going to the next results page.
+CDS will export records before going to the next results page.
 
 ## Usage
 
@@ -24,7 +24,6 @@ For example:
 python3 congressional_scraper.py climate congress_records_with_climate.csv
 
 python3 congressional_scraper.py climate congress_records_with_climate.csv -r 1000
-
 ```
 
 ## Appendix
