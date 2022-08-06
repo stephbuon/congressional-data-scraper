@@ -2,10 +2,10 @@
 The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" that contain your search term. It outputs a .csv file with columns for:
  
 - URL
+- Date
 - Title (of Record)
-- Speaker Name
+- Speaker
 - Text
-- Date 
 
 CDS will export records from an entire page of results before going to the next.
 
