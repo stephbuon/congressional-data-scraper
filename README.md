@@ -7,7 +7,7 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 - Text
 - Date 
 
-CDS will export records before going to the next results page.
+CDS will export records from an entire page of results before going to the next.
 
 ## Usage
 
