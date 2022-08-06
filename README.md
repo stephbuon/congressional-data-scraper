@@ -7,11 +7,13 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 - Text
 - Date 
 
+CDS will write to the output file before going to the next results page.
+
 ## Usage
 
 Required Parameters: 
 - `search_term` : return records with this term
-- `output_file` : name of export file. Will write to file at the end of each page
+- `output_file` : name of export file
 
 Optional Parameters:
 - `-r` : number of results
