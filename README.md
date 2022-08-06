@@ -18,7 +18,7 @@ Required Parameters:
 Optional Parameters:
 - `-r` : number of results
 
-For example: 
+Detailed Useage:
 
 ```
 python3 congressional_scraper.py climate congress_records_with_climate.csv
