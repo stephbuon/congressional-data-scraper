@@ -70,11 +70,11 @@ def scrape_search_results(search_term, max_results, page_num=1, retries=3):
         if retries and response.status_code == TOO_MANY_REQUESTS:
             retry_time = fetch_retry_time(response)
             time.sleep(retry_time)
-            return scrape_search_results(search_term, page_num=page_num, max_results=max_results, retries=retries - 1)
+            yield from scrape_search_results(search_term, max_results,  page_num=page_num, retries=retries - 1)
         elif retries:
             print('Retrying...')
             time.sleep(DEFAULT_RETRY_DELAY)
-            return scrape_search_results(search_term, page_num=page_num, max_results=max_results, retries=retries - 1)
+            yield from scrape_search_results(search_term, max_results, page_num=page_num, retries=retries - 1)
         else:
             print('Out of retries, skipping page...')
         return
@@ -114,14 +114,14 @@ def scrape_record(url, retries=3):
         if retries and response.status_code == TOO_MANY_REQUESTS:
             retry_time = fetch_retry_time(response)
             time.sleep(retry_time)
-            return scrape_record(url, retries=retries - 1)
+            yield from scrape_record(url, retries=retries - 1)
         elif retries:
             print('Retrying...')
             time.sleep(DEFAULT_RETRY_DELAY)
-            return scrape_record(url, retries=retries - 1)
+            yield from scrape_record(url, retries=retries - 1)
         else:
             print('Out of retries, skipping record...')
-            return
+        return
 
     page = BeautifulSoup(response.text, 'html.parser')
     main_wrapper = page.find('div', class_='main-wrapper')
@@ -165,14 +165,14 @@ def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=3
         if retries and response.status_code == TOO_MANY_REQUESTS:
             retry_time = fetch_retry_time(response)
             time.sleep(retry_time)
-            return scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
+            yield from scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
         elif retries:
             print('Retrying...')
             time.sleep(DEFAULT_RETRY_DELAY)
-            return scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
+            yield from scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
         else:
             print('Out of retries, skipping TXT data...')
-            return
+        return
 
     page = BeautifulSoup(response.text, 'html.parser')
 
