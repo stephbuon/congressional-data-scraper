@@ -11,7 +11,7 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 
 Required Parameters: 
 - `search_term` : return records with this term
-- `output_file` : 
+- `output_file` : name of export file. Will write to file at the end of each page
 
 Optional Parameters:
 - `-r` : number of results
