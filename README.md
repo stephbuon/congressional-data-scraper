@@ -9,6 +9,12 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 
 ## Usage
 
+Parameters: 
+- keyword 
+- export file name
+- (optional) number of results
+
+
 ```
 python3 congressional_scraper.py <keyword> <output filename>
 ```
@@ -17,6 +23,9 @@ For example:
 
 ```
 python3 congressional_scraper.py climate congress_records_with_climate.csv
+
+python3 congressional_scraper.py climate congress_records_with_climate.csv -r 1000
+
 ```
 
 ## Appendix
