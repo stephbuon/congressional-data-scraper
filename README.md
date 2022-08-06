@@ -9,15 +9,12 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 
 ## Usage
 
-Parameters: 
-- keyword 
-- export file name
-- (optional) number of results
+Required Parameters: 
+- `search_term` : return records with this term
+- `output_file` : 
 
-
-```
-python3 congressional_scraper.py <keyword> <output filename>
-```
+Optional Parameters:
+- `-r` : number of results
 
 For example: 
 
