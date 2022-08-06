@@ -4,8 +4,6 @@
 #SBATCH -p standard-mem-m,standard-mem-l,medium-mem-2,medium-mem-1-m,high-mem-1,high-mem-2
 #SBATCH --mem=8G
 #SBATCH --exclusive
-#SBATCH --mail-user="steph.buon@gmail.com"
-#SBATCH --mail-type=ALL
 
 module purge
 module load python/3
