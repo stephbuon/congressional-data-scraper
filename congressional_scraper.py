@@ -1,12 +1,11 @@
 import argparse
 import time
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 BASE_URL = 'https://congress.gov'
 SEARCH_URL = f'{BASE_URL}/search'
 PAGE_SIZE = 100
-DEFAULT_CONGRESS = list(range(105, 117 + 1))
-DEFAULT_RETRY_DELAY = 100
+DEFAULT_RETRY_DELAY = 610
 
 TOO_MANY_REQUESTS = 429
 
@@ -22,7 +21,15 @@ import pandas as pd
 from datetime import datetime
 
 
-# todo: ADD DATE and TITLE
+from enum import Enum
+
+
+class PageSorts(Enum):
+    RELEVANCY = 'relevancy'
+    ISSUE_DATE_ASCENDING = 'issueAsc'
+    ISSUE_DATE_DESCENDING = 'issueDesc'
+    TITLE = 'title'
+
 
 def create_query(search_term: str, congress: Optional[List[str]] = None):
     q = {
@@ -39,23 +46,26 @@ def create_query(search_term: str, congress: Optional[List[str]] = None):
 def fetch_retry_time(response: requests.Response):
     retry_time = response.headers.get('Retry-After', None)
     if retry_time is None:
-        print('No retry time header, using default.')
+        print('No retry time header, using default of %d seconds.' % DEFAULT_RETRY_DELAY)
         retry_time = DEFAULT_RETRY_DELAY
     else:
         try:
             retry_time = int(retry_time)
             print('Retry-After time from API is: %d' % retry_time)
+            # Additional buffer time
+            retry_time += 3
         except ValueError:
             print('Failed to parse retry time header, using default.')
             retry_time = DEFAULT_RETRY_DELAY
     return retry_time
 
 
-def scrape_search_results(search_term, max_results, page_num=1, retries=3):
+def scrape_search_results(search_term, max_results, congress: List[int], pageSort: str, page_num=1, retries=3, ):
     url_params = {
-        'q': create_query(search_term, congress=DEFAULT_CONGRESS),
+        'q': create_query(search_term, congress=congress),
         'pageSize': PAGE_SIZE,
         'page': page_num,
+        'pageSort': pageSort
     }
     url = f'{SEARCH_URL}?{urlencode(url_params)}'
     print(f'Search url: {url}')
@@ -70,11 +80,11 @@ def scrape_search_results(search_term, max_results, page_num=1, retries=3):
         if retries and response.status_code == TOO_MANY_REQUESTS:
             retry_time = fetch_retry_time(response)
             time.sleep(retry_time)
-            yield from scrape_search_results(search_term, max_results,  page_num=page_num, retries=retries - 1)
+            yield from scrape_search_results(search_term, max_results,  congress, pageSort, page_num=page_num, retries=retries - 1)
         elif retries:
             print('Retrying...')
             time.sleep(DEFAULT_RETRY_DELAY)
-            yield from scrape_search_results(search_term, max_results, page_num=page_num, retries=retries - 1)
+            yield from scrape_search_results(search_term, max_results, congress, pageSort, page_num=page_num, retries=retries - 1)
         else:
             print('Out of retries, skipping page...')
         return
@@ -92,10 +102,10 @@ def scrape_search_results(search_term, max_results, page_num=1, retries=3):
             yield from scrape_record(f'{BASE_URL}{result_href}')
         except StopIteration:
             continue
-        except RuntimeError:
-            continue
+        # except RuntimeError:
+        #     continue
         max_results -= 1
-        if not max_results:
+        if max_results <= 0:
             break
     #
     # if max_results and search_results:
@@ -190,20 +200,44 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('search_term',
-                        help='Return congressional records containing this term.')
+                        help='Return congressional records containing this term. '
+                             'For multi-word search terms, surround them in double quotation marks.')
     parser.add_argument('output_file',
-                        help='Return congressional records containing this term.')
+                        help='Name of the output file')
     parser.add_argument('-r', '--result-count',
-                        help='Max number of results you want',
-                        default=9000, type=int, nargs='?')
+                        help='Max number of results you want (default: %(default)s)',
+                        default=9000, const=9000, type=int, nargs='?')
+    parser.add_argument('--start-congress',
+                        help='Beginning congress (inclusive) (default: %(default)s)',
+                        default=105, const=105, type=int, nargs='?')
+    parser.add_argument('--end-congress',
+                        help='End congress (inclusive) (default: %(default)s)',
+                        default=117, const=117, type=int, nargs='?')
+    parser.add_argument('--default-retry-delay',
+                        help='Default retry delay in seconds when an API call fail due to throttling.'
+                        '(default: %(default)s)',
+                        default=DEFAULT_RETRY_DELAY, const=DEFAULT_RETRY_DELAY, type=int, nargs='?')
+    parser.add_argument('--sort',
+                        default=PageSorts.ISSUE_DATE_ASCENDING.value,
+                        const=PageSorts.ISSUE_DATE_ASCENDING.value,
+                        nargs='?',
+                        choices=[v.value for v in PageSorts],
+                        help='Sort method for search results (default: %(default)s)')
+
     # parser.add_argument('-fy', '--start_year',
     #                     help='The starting date in your date range (it does not matter if the larger or smaller year comes first).')
     # parser.add_argument('-ly', '--end_year',
     #                     help='The ending date in your date range (it does not matter if the smaller or larger year comes first).')
     args = parser.parse_args()
     max_result_count = args.result_count
+    print('Max results specified: %d' % max_result_count)
     page_count = 0
     total_result_count = 0
+
+    DEFAULT_RETRY_DELAY = args.default_retry_delay
+    print('Retry delay is %d' % DEFAULT_RETRY_DELAY)
+
+    congress_range = list(range(args.start_congress, args.end_congress + 1))
 
     # Reset/create file
     with open(args.output_file, 'w+') as f:
@@ -213,19 +247,20 @@ if __name__ == '__main__':
         num_page_results = 0
         page_results = []
         page_count += 1
-        for result in scrape_search_results(args.search_term, max_result_count, page_num=page_count):
+        for result in scrape_search_results(args.search_term, max_result_count, congress=congress_range, pageSort=args.sort, page_num=page_count):
             if result is None:
                 continue
             url, date, title, speaker, text = result
             text = text.replace('\n', ' ').replace('\t', ' ')
             page_results.append({"url": url, "date": date, "title": title, "speaker": speaker, "text": text})
             num_page_results += 1
-            max_result_count -= 1
 
-            if not max_result_count:
-                break
+        max_result_count -= PAGE_SIZE
+        if max_result_count <= 0:
+            break
 
         if not num_page_results:
+            print('Ending due to lack of results on page: %d' % page_count)
             break
 
         df = pd.DataFrame(page_results)
