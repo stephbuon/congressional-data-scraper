@@ -7,7 +7,7 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 - Speaker
 - Text
 
-CDS will export records from a results page before transitioning to the next page. By default, CDS starts at the 105th Congress (the first Congress where Records were consistently digitized). 
+CDS will export records from a results page before transitioning to the next page. By default, CDS starts at the 105th Congress (which is the first Congress where Records were consistently digitized). 
 
 ## Usage
 
