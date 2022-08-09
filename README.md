@@ -42,7 +42,8 @@ Scrape and export 200,000 Congressional Records containing the word "climate" st
 python congressional_scraper.py the congress_keyword_the.psv -r 200000 --start-congress 114 --end-congress 117
 ```
 
-For information about the CDS and the data, see our wiki: 
+## For More Information ...
+... see our wiki: 
 - [About the Data](https://github.com/stephbuon/congressional-data-scraper/wiki/About-the-Data)
 - [Number of Records Per Caucus]()
 - [Time Requirements for Scraping Bulk Data/Retry Times](https://github.com/stephbuon/congressional-data-scraper/wiki/Retry-Times)
