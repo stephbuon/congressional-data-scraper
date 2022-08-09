@@ -12,15 +12,15 @@ CDS will export records from a results page before transitioning to the next pag
 ## Usage
 
 Required Parameters: 
-- `search_term` : return records with this term
-- `output_file` : name of export file
+- `search_term` return records with this term
+- `output_file` name of export file
 
 Optional Parameters:
-- `-r, --result_count` : number of records to query (default 9,000 records)
-- `--start-congress` : specify first congress to query (default 105th Congrss)
-- `--end-congress` : specify last congress to query (default latest congress)
-- `--default-retry-delay` : ASK
-- `--sort` : ASK
+- `-r, --result_count` number of records to query (default 9,000 records)
+- `--start-congress` specify first congress to query (default 105th Congrss)
+- `--end-congress` specify last congress to query (default latest congress)
+- `--default-retry-delay` ASK
+- `--sort` ASK
 
 ### Useage Examples:
 
