@@ -22,7 +22,7 @@ Optional Parameters:
 - `--default-retry-delay` : ASK
 - `--sort` : ASK
 
-Useage Examples:
+**Useage Examples:**
 
 Scrape and export Congressional Records containing the word "climate." By default, this will start at the 105th Congress and query 9,000 files. 
 
