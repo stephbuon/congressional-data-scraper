@@ -7,7 +7,7 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 - Speaker
 - Text
 
-CDS will export records from a results page before transitioning to the next page. By default, CDS starts at the 105th Congress (which is the first Congress where Records were consistently digitized). 
+CDS will export records from a results page before transitioning to the next page. By default, CDS starts at the 104th Congress (which is the first Congress where Records were consistently digitized in HTML). 
 
 ## Usage
 
@@ -17,20 +17,20 @@ Required Parameters:
 
 Optional Parameters:
 - `-r, --result_count` number of records to query (default 9,000 records)
-- `--start-congress` specify first congress to query (default 105th Congrss, inclusive)
+- `--start-congress` specify first congress to query (default 104th Congrss, inclusive)
 - `--end-congress` specify last congress to query (default latest congress)
 - `--default-retry-delay` ASK
 - `--sort` ASK
 
 ### Useage Examples:
 
-Scrape and export Congressional Records containing the word "climate." By default, this will start at the 105th Congress and query 9,000 files. 
+Scrape and export Congressional Records containing the word "climate." By default, this will start at the 104th Congress and query 9,000 files. 
 
 ```
 python3 congressional_scraper.py climate congress_records_with_climate.csv
 ```
 
-Scrape and export 1,000 Congressional Records containing the word "climate" starting with the 105th Congress.  
+Scrape and export 1,000 Congressional Records containing the word "climate" starting with the 104th Congress.  
 
 ```
 python3 congressional_scraper.py climate congress_records_with_climate.csv -r 1000
@@ -56,4 +56,4 @@ There are a few minor differences between the Daily Edition and the Bound editio
 ### Scraping Bulk Data: Time
 The "congress.gov" website mandates retry times after an amount of API hits. The website does not specify or request lengths for retry times or the number of queries that can be made before a retry time is imposed, however. Therefore, when possible, we catch the retry time, usually ~8 minutes. Otherwise, we impose our own retry time of 10 minutes. 
 
-The length of the retry times can make scraping the data a slow process and can also make estimating time to completion difficult. To read about our experiences/accounts on how we deal with this problem, see our CDS [Wiki](). 
+The length of the retry times can make scraping the data a slow process and can also make estimating time to completion difficult. To read about our experiences/accounts on how we deal with this problem, see our CDS [wiki](). 
