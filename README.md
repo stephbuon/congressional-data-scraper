@@ -1,5 +1,5 @@
 # Congressional Data Scraper
-The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" that contain your search term. It outputs a .csv file with columns for:
+The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" that contain a search term. It outputs a .csv file with columns for:
  
 - URL
 - Date
@@ -53,5 +53,5 @@ CDS collects the plain text versions of the Daily Edition of the U.S. Congressio
 
 There are a few minor differences between the Daily Edition and the Bound edition. These differences have to do with pagination, name prefixing, and other conventions of the like. For a full description of the differences between the two versions, see [Gov Info](https://www.govinfo.gov/help/crecb).  
 
-### About Scrapping congress.gov
-enter 
+### Scraping Bulk Data
+The "congress.gov" website mandates retry times after an amount of API hits. Because their website does not specify or request the lengths for retry times, we provide two solutions: a) we catch the retry time for when CDS has exhausted Record hits (about 8 minutes) and b) we impose our own retry time (10 minutes) for when a rety time is not returned by the site (e.g. when the site mandates a retry time before going to the next results page). 
