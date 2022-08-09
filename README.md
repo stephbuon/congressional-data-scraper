@@ -16,7 +16,7 @@ Required Parameters:
 - `output_file` : name of export file
 
 Optional Parameters:
-- `-r, --result_count` : number of results
+- `-r, --result_count` : number of records
 
 Detailed Useage:
 
