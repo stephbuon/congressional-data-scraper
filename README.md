@@ -17,7 +17,7 @@ Required Parameters:
 
 Optional Parameters:
 - `-r, --result_count` number of records to query (default 9,000 records)
-- `--start-congress` specify first congress to query (default 105th Congrss)
+- `--start-congress` specify first congress to query (default 105th Congrss, inclusive)
 - `--end-congress` specify last congress to query (default latest congress)
 - `--default-retry-delay` ASK
 - `--sort` ASK
@@ -30,13 +30,13 @@ Scrape and export Congressional Records containing the word "climate." By defaul
 python3 congressional_scraper.py climate congress_records_with_climate.csv
 ```
 
-Scrape and export 1,000 Congressional Records containing the word "climate" starting at the 105th Congress.  
+Scrape and export 1,000 Congressional Records containing the word "climate" starting with the 105th Congress.  
 
 ```
 python3 congressional_scraper.py climate congress_records_with_climate.csv -r 1000
 ```
 
-Scrape and export 200,000 Congressional Records containing the word "climate" starting at the 114th Congress and ending at the 117th Congress. 
+Scrape and export 200,000 Congressional Records containing the word "climate" starting with the 114th Congress and ending with the 117th Congress. 
 
 ```
 python congressional_scraper.py the congress_keyword_the.psv -r 200000 --start-congress 114 --end-congress 117
