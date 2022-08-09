@@ -53,5 +53,5 @@ CDS collects the plain text versions of the Daily Edition of the U.S. Congressio
 
 There are a few minor differences between the Daily Edition and the Bound edition. These differences have to do with pagination, name prefixing, and other conventions of the like. For a full description of the differences between the two versions, see [Gov Info](https://www.govinfo.gov/help/crecb).  
 
-### About Scrapping Congress.gov
+### About Scrapping congress.gov
 enter 
