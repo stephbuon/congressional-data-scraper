@@ -56,4 +56,4 @@ There are a few minor differences between the Daily Edition and the Bound editio
 ### Scraping Bulk Data: Time Limitations
 The "congress.gov" website mandates retry times after an amount of API hits. The website does not specify or request lengths for retry times, however. Therefore, when possible, we catch the retry time, usually ~8 minutes. Otherwise, we impose our own retry time of 10 minutes. 
 
-The length of the retry times can make scraping the data a slow process and can also make estimating time to completion difficult. For more information about how we deal with this probelm, see our CDS [Wiki](). 
+The length of the retry times can make scraping the data a slow process and can also make estimating time to completion difficult. To read about our experiences/accounts on how we deal with this problem, see our CDS [Wiki](). 
