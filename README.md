@@ -7,7 +7,9 @@ The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily
 - Speaker
 - Text
 
-CDS will export records from an entire page of results before going to the next. By default, CDS starts at the 105th Congress (daily digital) and moves into the present moment 
+CDS will export records from a results page before transitioning to the next page. 
+
+By default, CDS starts at the 105th Congress (the first Congress where Records were consistently digitized). 
 
 ## Usage
 
@@ -16,8 +18,8 @@ Required Parameters:
 - `output_file` : name of export file
 
 Optional Parameters:
-- `-r, --result_count` : number of records to query (default 9000)
-- `--start-congress` : specify first congress to query (default 105)
+- `-r, --result_count` : number of records to query (default 9,000 records)
+- `--start-congress` : specify first congress to query (default 105th Congrss)
 - `--end-congress` : specify last congress to query (default latest congress)
 - `--default-retry-delay` : ASK
 - `--sort` : ASK
