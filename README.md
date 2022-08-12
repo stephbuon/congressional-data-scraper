@@ -21,8 +21,9 @@ Optional Parameters:
 - `-r, --result_count` number of records to query (default 9,000 records)
 - `--start-congress` specify first congress to query (default 104th Congrss, inclusive)
 - `--end-congress` specify last congress to query (default latest congress)
-- `--default-retry-delay` ASK
-- `--sort` ASK
+- `--default-retry-delay` length of time to wait when retry time is not offered (in seconds) 
+- `--sort` options to sort results
+- `-h` help 
 
 ### Useage Examples:
 
