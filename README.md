@@ -23,7 +23,7 @@ Optional Parameters:
 - `--end-congress` specify last congress to query (default latest congress)
 - `--default-retry-delay` length of time to wait when retry time is not offered (in seconds) 
 - `--sort` options to sort results
-- `-h` help 
+- `-h` see help pages in terminal 
 
 ### Useage Examples:
 
