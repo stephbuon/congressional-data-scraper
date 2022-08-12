@@ -1,4 +1,4 @@
-Note: We want everyone to have the ability to collect Congressional Records! If you have never used Python before watch this [3 minute video]() and you will be collecting records by the end. 
+Note: We want everyone to have the ability to collect Congressional Records! If you have never used Python before watch this [3 minute video]() and by the end you will be collecting data. 
 
 # Congressional Data Scraper
 The Congressional Data Scraper (CDS) scrapes the plain text version of the Daily Editions of the U.S. Congressional Records from "congress.gov" that contain a search term. It outputs a .csv file with columns for:
