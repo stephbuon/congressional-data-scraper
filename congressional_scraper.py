@@ -9,6 +9,11 @@ DEFAULT_RETRY_DELAY = 610
 
 TOO_MANY_REQUESTS = 429
 
+
+class EndOfQueryException(Exception):
+    pass
+
+
 from urllib.parse import quote_plus, urlencode
 import json
 import requests
@@ -95,6 +100,9 @@ def scrape_search_results(search_term, max_results, congress: List[int], pageSor
     search_results = body.find_all('span', class_='congressional-record-heading')
     print('Number of results: %d' % len(search_results))
 
+    if not len(search_results):
+        raise EndOfQueryException('No results on page %d' % page_num)
+
     for search_result_span in search_results:
         tag = search_result_span.find('a')
         result_href = tag.get('href')
@@ -104,8 +112,8 @@ def scrape_search_results(search_term, max_results, congress: List[int], pageSor
             continue
         # except RuntimeError:
         #     continue
-        max_results -= 1
-        if max_results <= 0:
+        max_results[0] -= 1
+        if max_results[0] <= 0:
             break
     #
     # if max_results and search_results:
@@ -229,8 +237,8 @@ if __name__ == '__main__':
     # parser.add_argument('-ly', '--end_year',
     #                     help='The ending date in your date range (it does not matter if the smaller or larger year comes first).')
     args = parser.parse_args()
-    max_result_count = args.result_count
-    print('Max results specified: %d' % max_result_count)
+    max_result_count = [ args.result_count ]  # Must be list to pass by reference
+    print('Max results specified: %d' % max_result_count[0])
     page_count = 0
     total_result_count = 0
 
@@ -243,30 +251,34 @@ if __name__ == '__main__':
     with open(args.output_file, 'w+') as f:
         pass
 
-    while max_result_count:
+    while max_result_count[0] > 0:
         num_page_results = 0
         page_results = []
         page_count += 1
-        for result in scrape_search_results(args.search_term, max_result_count, congress=congress_range, pageSort=args.sort, page_num=page_count):
-            if result is None:
-                continue
-            url, date, title, speaker, text = result
-            text = text.replace('\n', ' ').replace('\t', ' ')
-            page_results.append({"url": url, "date": date, "title": title, "speaker": speaker, "text": text})
-            num_page_results += 1
+        old_search_count = max_result_count[0]
 
-        max_result_count -= PAGE_SIZE
-        if max_result_count <= 0:
-            break
+        try:
+            for result in scrape_search_results(args.search_term, max_result_count, congress=congress_range, pageSort=args.sort, page_num=page_count):
+                if result is None:
+                    continue
+                url, date, title, speaker, text = result
+                text = text.replace('\n', ' ').replace('\t', ' ')
+                page_results.append({"url": url, "date": date, "title": title, "speaker": speaker, "text": text})
+                num_page_results += 1
 
-        if not num_page_results:
-            print('Ending due to lack of results on page: %d' % page_count)
-            break
+        except EndOfQueryException as e:
+            print(e)
 
-        df = pd.DataFrame(page_results)
-        df.set_index("url", inplace=True)
-        df.to_csv(args.output_file, sep='|', mode='a', header=page_count == 1)
+        if page_results:
+            df = pd.DataFrame(page_results)
+            df.set_index("url", inplace=True)
+            df.to_csv(args.output_file, sep='|', mode='a', header=page_count == 1)
 
         total_result_count += num_page_results
 
-    print('Scraped: %d pages, %d individual records.' % (page_count, total_result_count))
+        if max_result_count[0] <= 0:
+            break
+
+    print('Scraped: %d pages, %d individual records, %d individual speaker speeches.' % (page_count,
+                                                                                 args.result_count - max_result_count[0],
+                                                                                 total_result_count))
