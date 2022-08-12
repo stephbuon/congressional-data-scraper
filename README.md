@@ -13,8 +13,6 @@ CDS will export records from a results page before transitioning to the next pag
 
 ## Usage
 
-**Terminal**
-
 Required Parameters: 
 - `search_term` return records with this term
 - `output_file` name of export file
@@ -44,12 +42,6 @@ Scrape and export 200,000 Congressional Records containing the word "climate" st
 
 ```
 python congressional_scraper.py the congress_keyword_the.psv -r 200000 --start-congress 114 --end-congress 117
-```
-
-**SLURM**
-
-```
-sbatch congressional_scraper.sbatch 
 ```
 
 ## For More Information ...
