@@ -1,6 +1,7 @@
 import argparse
 import time
 from typing import Optional, List, Tuple
+import re
 
 BASE_URL = 'https://congress.gov'
 SEARCH_URL = f'{BASE_URL}/search'
@@ -106,10 +107,14 @@ def scrape_search_results(search_term, max_results, congress: List[int], pageSor
     for search_result_span in search_results:
         tag = search_result_span.find('a')
         result_href = tag.get('href')
+        scrape_time = time.time()
         try:
             yield from scrape_record(f'{BASE_URL}{result_href}')
         except StopIteration:
             continue
+        scrape_time = time.time() - scrape_time
+        print('Scrape took: %f seconds' % scrape_time)
+
         # except RuntimeError:
         #     continue
         max_results[0] -= 1
@@ -200,6 +205,7 @@ def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=3
         raise StopIteration
     record_text = record_text.text
 
+    print('Scraping record text for speakers...')
     for speaker, text in speaker_scraper.scrape(record_text):
         yield record_url, record_date, record_title, speaker, text
 
@@ -273,6 +279,8 @@ if __name__ == '__main__':
             df = pd.DataFrame(page_results)
             df.set_index("url", inplace=True)
             df.to_csv(args.output_file, sep='|', mode='a', header=page_count == 1)
+        else:
+            print('Got 0 speeches for page: %d' % page_count)
 
         total_result_count += num_page_results
 
