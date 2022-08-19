@@ -10,6 +10,8 @@ DEFAULT_RETRY_DELAY = 610
 
 TOO_MANY_REQUESTS = 429
 
+START_TIME = 0
+
 
 class EndOfQueryException(Exception):
     pass
@@ -76,6 +78,7 @@ def scrape_search_results(search_term, max_results, congress: List[int], pageSor
     url = f'{SEARCH_URL}?{urlencode(url_params)}'
     print(f'Search url: {url}')
     print('Page number is: %d' % page_num)
+    print('Time elapsed: %f seconds' % (time.time() - START_TIME))
 
     response = requests.get(url)
 
@@ -256,6 +259,8 @@ if __name__ == '__main__':
     # Reset/create file
     with open(args.output_file, 'w+') as f:
         pass
+
+    START_TIME = time.time()
 
     while max_result_count[0] > 0:
         num_page_results = 0
