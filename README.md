@@ -25,7 +25,7 @@ Optional Parameters:
 - `--sort` options to sort results
 - `-h` see help pages in terminal 
 
-### Examples:
+### Examples
 
 Scrape and export Congressional Records containing the word "climate." By default, this will start at the 104th Congress and query 9,000 files. 
 
