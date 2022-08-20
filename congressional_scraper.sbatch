@@ -9,4 +9,4 @@ module purge
 module load python/3
 
 hostname
-python congressional_scraper.py the congress_keyword_the.psv -r 360000 --start-congress 112 --end-congress 117
+python congressional_scraper.py the congress_keyword_the.psv -r 360000 --start-congress 112 --end-congress 117 --default-retry-delay 2000
