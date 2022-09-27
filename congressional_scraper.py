@@ -80,14 +80,7 @@ def scrape_search_results(search_term, max_results, congress: List[int], pageSor
     print('Page number is: %d' % page_num)
     print('Time elapsed: %f seconds' % (time.time() - START_TIME))
     
-    smuproxy = {
-        'http': 'http://10.210.15.2:3128/',
-        'https': 'http://10.210.15.2:3128/' 
-    }
-
-    response = requests.get(url, proxies=smuproxy)
-    
-    #response = requests.get(url)
+    response = requests.get(url)
 
     try:
         response.raise_for_status()
