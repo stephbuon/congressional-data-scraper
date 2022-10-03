@@ -12,6 +12,8 @@ TOO_MANY_REQUESTS = 429
 
 START_TIME = 0
 
+PROXIES = {}
+
 
 class EndOfQueryException(Exception):
     pass
@@ -80,7 +82,7 @@ def scrape_search_results(search_term, max_results, congress: List[int], pageSor
     print('Page number is: %d' % page_num)
     print('Time elapsed: %f seconds' % (time.time() - START_TIME))
     
-    response = requests.get(url)
+    response = requests.get(url, proxies=PROXIES)
 
     try:
         response.raise_for_status()
@@ -131,7 +133,7 @@ def scrape_search_results(search_term, max_results, congress: List[int], pageSor
 
 def scrape_record(url, retries=3):
     print('scrape_record', url)
-    response = requests.get(url)
+    response = requests.get(url, proxies=PROXIES)
 
     try:
         response.raise_for_status()
@@ -182,7 +184,7 @@ def scrape_record(url, retries=3):
 def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=3):
     print(f'Fetching record from {BASE_URL}{txt_link}...')
 
-    response = requests.get(f'{BASE_URL}{txt_link}')
+    response = requests.get(f'{BASE_URL}{txt_link}', proxies=PROXIES)
 
     try:
         response.raise_for_status()
@@ -240,12 +242,23 @@ if __name__ == '__main__':
                         nargs='?',
                         choices=[v.value for v in PageSorts],
                         help='Sort method for search results (default: %(default)s)')
+    parser.add_argument('--proxy', nargs='*')
 
     # parser.add_argument('-fy', '--start_year',
     #                     help='The starting date in your date range (it does not matter if the larger or smaller year comes first).')
     # parser.add_argument('-ly', '--end_year',
     #                     help='The ending date in your date range (it does not matter if the smaller or larger year comes first).')
     args = parser.parse_args()
+
+    if args.proxy:
+        for proxy in args.proxy:
+            if '://' not in proxy:
+                print('Ignoring malformed proxy: %s' % proxy)
+                continue
+            protocol = proxy.split('://')[0]
+            PROXIES[protocol] = proxy
+            print('Using proxy: %s for protocol %s' % (proxy, protocol))
+
     max_result_count = [ args.result_count ]  # Must be list to pass by reference
     print('Max results specified: %d' % max_result_count[0])
     page_count = 0
