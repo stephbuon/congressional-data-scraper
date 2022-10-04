@@ -46,6 +46,8 @@ Scrape and export 200,000 Congressional Records containing the word "climate" st
 python congressional_scraper.py the congress_keyword_the.psv -r 200000 --start-congress 114 --end-congress 117
 ```
 
+Route trafficking via two proxy addresses.
+
 ```
 python congressional_scraper.py climate congress_records_with_climate.csv --proxy http://1.1.1.1 https://1.1.1.1
 ```
