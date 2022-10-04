@@ -23,6 +23,7 @@ Optional Parameters:
 - `--end-congress` specify last congress to query (default latest congress)
 - `--default-retry-delay` length of time to wait when retry time is not offered (in seconds) 
 - `--sort` options to sort results
+- `--proxy` send trafficking through one or more proxy separated by a space
 - `-h` see help pages in terminal 
 
 ### Examples
@@ -43,6 +44,10 @@ Scrape and export 200,000 Congressional Records containing the word "climate" st
 
 ```
 python congressional_scraper.py the congress_keyword_the.psv -r 200000 --start-congress 114 --end-congress 117
+```
+
+```
+python congressional_scraper.py climate congress_records_with_climate.csv --proxy http://1.1.1.1 https://1.1.1.1
 ```
 
 ## For More Information ...
