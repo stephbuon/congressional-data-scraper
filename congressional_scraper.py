@@ -1,310 +1,288 @@
 import argparse
 import time
-from typing import Optional, List, Tuple
-import re
-
-BASE_URL = 'https://congress.gov'
-SEARCH_URL = f'{BASE_URL}/search'
-PAGE_SIZE = 100
-DEFAULT_RETRY_DELAY = 610
-
-TOO_MANY_REQUESTS = 429
-
-START_TIME = 0
-
-PROXIES = {}
-
-
-class EndOfQueryException(Exception):
-    pass
-
-
-from urllib.parse import quote_plus, urlencode
 import json
 import requests
-
 from bs4 import BeautifulSoup
-
-import speaker_scraper
-
 import pandas as pd
 from datetime import datetime
+from typing import Optional, List
+import speaker_scraper  # Ensure this module is available
+import sys
+import logging
+import csv  # Import csv module for quoting
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
-from enum import Enum
+# Constants
+API_KEY = 'A7azqIhchlSqg51zRYciPKu0k69V2EgFeyqRJRBL'  # Replace with your actual API key
+BASE_API_URL = 'https://api.govinfo.gov'
+CHRG_COLLECTION = 'CHRG'
+PAGE_SIZE = 1000  # Max allowed by GovInfo API
+RETRY_DELAY = 60  # seconds
+MAX_RETRIES = 5
 
-
-class PageSorts(Enum):
-    RELEVANCY = 'relevancy'
-    ISSUE_DATE_ASCENDING = 'issueAsc'
-    ISSUE_DATE_DESCENDING = 'issueDesc'
-    TITLE = 'title'
-
-
-def create_query(search_term: str, congress: Optional[List[str]] = None):
-    q = {
-        "source": "congrecord",
-        "search": search_term,
+def get_search_results(query: str, page_size: int, offset_mark: Optional[str] = None) -> dict:
+    search_url = f"{BASE_API_URL}/search"
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+    params = {
+        'api_key': API_KEY
+    }
+    payload = {
+        "query": query,
+        "pageSize": page_size,
+        "offsetMark": offset_mark if offset_mark else "*",
+        "sorts": [
+            {
+                "field": "relevancy",
+                "sortOrder": "DESC"
+            }
+        ],
+        "historical": True,
+        "resultLevel": "default"
     }
 
-    if congress is not None:
-        q["congress"] = congress
+    logging.info(f"Sending POST request to {search_url} with payload: {json.dumps(payload)[:500]}...")  # Truncated for readability
 
-    return json.dumps(q)
-
-
-def fetch_retry_time(response: requests.Response):
-    retry_time = response.headers.get('Retry-After', None)
-    if retry_time is None:
-        print('No retry time header, using default of %d seconds.' % DEFAULT_RETRY_DELAY)
-        retry_time = DEFAULT_RETRY_DELAY
-    else:
+    for attempt in range(1, MAX_RETRIES + 1):
         try:
-            retry_time = int(retry_time)
-            print('Retry-After time from API is: %d' % retry_time)
-            # Additional buffer time
-            retry_time += 3
-        except ValueError:
-            print('Failed to parse retry time header, using default.')
-            retry_time = DEFAULT_RETRY_DELAY
-    return retry_time
+            response = requests.post(search_url, headers=headers, params=params, json=payload)
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', RETRY_DELAY))
+                logging.warning(f"Rate limited (429). Retrying after {retry_after} seconds...")
+                time.sleep(retry_after)
+                continue
+            response.raise_for_status()
+            logging.info("Search request successful.")
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"HTTPError on attempt {attempt}: {e}")
+            logging.error(f"Response Body: {response.text}")  # Log response body for debugging
+            if attempt < MAX_RETRIES:
+                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+            else:
+                logging.error("Max retries reached. Exiting search.")
+                raise
+        except Exception as e:
+            logging.error(f"Unexpected error on attempt {attempt}: {e}")
+            if attempt < MAX_RETRIES:
+                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+            else:
+                logging.error("Max retries reached. Exiting search.")
+                raise
 
-
-def scrape_search_results(search_term, max_results, congress: List[int], pageSort: str, page_num=1, retries=3, ):
-    url_params = {
-        'q': create_query(search_term, congress=congress),
+def get_granules(package_id: str) -> List[dict]:
+    granules_url = f"{BASE_API_URL}/packages/{package_id}/granules"
+    params = {
+        'api_key': API_KEY,
         'pageSize': PAGE_SIZE,
-        'page': page_num,
-        'pageSort': pageSort
+        'offsetMark': '*'
     }
-    url = f'{SEARCH_URL}?{urlencode(url_params)}'
-    print(f'Search url: {url}')
-    print('Page number is: %d' % page_num)
-    print('Time elapsed: %f seconds' % (time.time() - START_TIME))
-    
-    response = requests.get(url, proxies=PROXIES)
-
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as e:
-        print('Failed to fetch initial search url. Reason: ' + str(e))
-        if retries and response.status_code == TOO_MANY_REQUESTS:
-            retry_time = fetch_retry_time(response)
-            time.sleep(retry_time)
-            yield from scrape_search_results(search_term, max_results,  congress, pageSort, page_num=page_num, retries=retries - 1)
-        elif retries:
-            print('Retrying...')
-            time.sleep(DEFAULT_RETRY_DELAY)
-            yield from scrape_search_results(search_term, max_results, congress, pageSort, page_num=page_num, retries=retries - 1)
-        else:
-            print('Out of retries, skipping page...')
-        return
-
-    print('Parsing search page...')
-    page = BeautifulSoup(response.text, 'html.parser')
-    body = page.body
-    search_results = body.find_all('span', class_='congressional-record-heading')
-    print('Number of results: %d' % len(search_results))
-
-    if not len(search_results):
-        raise EndOfQueryException('No results on page %d' % page_num)
-
-    for search_result_span in search_results:
-        tag = search_result_span.find('a')
-        result_href = tag.get('href')
-        scrape_time = time.time()
+    granules = []
+    while True:
+        logging.info(f"Fetching granules from {granules_url} with params {params}")
         try:
-            yield from scrape_record(f'{BASE_URL}{result_href}')
-        except StopIteration:
-            continue
-        scrape_time = time.time() - scrape_time
-        print('Scrape took: %f seconds' % scrape_time)
-
-        # except RuntimeError:
-        #     continue
-        max_results[0] -= 1
-        if max_results[0] <= 0:
+            response = requests.get(granules_url, params=params)
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', RETRY_DELAY))
+                logging.warning(f"Rate limited while fetching granules (429). Retrying after {retry_after} seconds...")
+                time.sleep(retry_after)
+                continue
+            response.raise_for_status()
+            data = response.json()
+            fetched_granules = data.get('granules', [])
+            granules.extend(fetched_granules)
+            logging.info(f"Fetched {len(fetched_granules)} granules.")
+            if 'nextOffsetMark' in data:
+                params['offsetMark'] = data['nextOffsetMark']
+            else:
+                break
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"HTTPError while fetching granules: {e}")
+            logging.error(f"Response Body: {response.text}")  # Log response body for debugging
             break
-    #
-    # if max_results and search_results:
-    #     print('Continuing to next page...')
-    #     yield from scrape_search_results(search_term, page_num + 1, max_results)
+        except Exception as e:
+            logging.error(f"Unexpected error while fetching granules: {e}")
+            break
+    return granules
 
+def get_granule_summary(package_id: str, granule_id: str) -> dict:
+    summary_url = f"{BASE_API_URL}/packages/{package_id}/granules/{granule_id}/summary"
+    params = {
+        'api_key': API_KEY
+    }
+    logging.info(f"Fetching granule summary from {summary_url}")
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(summary_url, params=params)
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', RETRY_DELAY))
+                logging.warning(f"Rate limited while fetching granule summary (429). Retrying after {retry_after} seconds...")
+                time.sleep(retry_after)
+                continue
+            response.raise_for_status()
+            logging.info("Granule summary fetched successfully.")
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"HTTPError on attempt {attempt} while fetching granule summary: {e}")
+            logging.error(f"Response Body: {response.text}")  # Log response body for debugging
+            if attempt < MAX_RETRIES:
+                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+            else:
+                logging.error("Max retries reached for granule summary. Skipping this granule.")
+                return {}
+        except Exception as e:
+            logging.error(f"Unexpected error on attempt {attempt} while fetching granule summary: {e}")
+            if attempt < MAX_RETRIES:
+                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+            else:
+                logging.error("Max retries reached for granule summary. Skipping this granule.")
+                return {}
 
-def scrape_record(url, retries=3):
-    print('scrape_record', url)
-    response = requests.get(url, proxies=PROXIES)
+def get_htm_content(package_id: str, granule_id: str) -> str:
+    htm_url = f"{BASE_API_URL}/packages/{package_id}/granules/{granule_id}/htm"
+    params = {
+        'api_key': API_KEY
+    }
+    logging.info(f"Fetching HTM content from {htm_url}")
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(htm_url, params=params)
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('Retry-After', RETRY_DELAY))
+                logging.warning(f"Rate limited while fetching HTM content (429). Retrying after {retry_after} seconds...")
+                time.sleep(retry_after)
+                continue
+            response.raise_for_status()
+            logging.info("HTM content fetched successfully.")
+            return response.text
+        except requests.exceptions.HTTPError as e:
+            logging.error(f"HTTPError on attempt {attempt} while fetching HTM content: {e}")
+            logging.error(f"Response Body: {response.text}")  # Log response body for debugging
+            if attempt < MAX_RETRIES:
+                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+            else:
+                logging.error("Max retries reached for HTM content. Skipping this granule.")
+                return ""
+        except Exception as e:
+            logging.error(f"Unexpected error on attempt {attempt} while fetching HTM content: {e}")
+            if attempt < MAX_RETRIES:
+                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+            else:
+                logging.error("Max retries reached for HTM content. Skipping this granule.")
+                return ""
 
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as e:
-        print('Failed to scrape record. Reason: ' + str(e))
-        if retries and response.status_code == TOO_MANY_REQUESTS:
-            retry_time = fetch_retry_time(response)
-            time.sleep(retry_time)
-            yield from scrape_record(url, retries=retries - 1)
-        elif retries:
-            print('Retrying...')
-            time.sleep(DEFAULT_RETRY_DELAY)
-            yield from scrape_record(url, retries=retries - 1)
-        else:
-            print('Out of retries, skipping record...')
-        return
+def process_speech(record_url: str, record_date: str, record_title: str, htm_content: str):
+    soup = BeautifulSoup(htm_content, 'html.parser')
+    pre_tag = soup.find('pre')
+    if not pre_tag:
+        logging.warning(f"No <pre> tag found in {record_url}. Skipping...")
+        return []
+    record_text = pre_tag.get_text()
+    speeches = speaker_scraper.scrape(record_text)
+    processed_speeches = []
+    for speaker, text in speeches:
+        text = text.replace('\n', ' ').replace('\t', ' ').strip()
+        processed_speeches.append({
+            "url": record_url,
+            "date": record_date,
+            "title": record_title,
+            "speaker": speaker,
+            "text": text
+        })
+    return processed_speeches
 
-    page = BeautifulSoup(response.text, 'html.parser')
-    main_wrapper = page.find('div', class_='main-wrapper')
+def main(output_file: str, max_results: Optional[int]):
+    query = f"collection:{CHRG_COLLECTION}"  # Removed 'hasText:true' to prevent 500 errors
+    offset_mark = None
+    total_results = 0
 
-    if main_wrapper is None:
-        print('Failed to fetch record.')
-        raise StopIteration
+    # Initialize CSV with header using comma delimiter
+    with open(output_file, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=["url", "date", "title", "speaker", "text"], delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
+        writer.writeheader()
 
-    title = ''
-    date = ''
-    title_tag = main_wrapper.find('h2')
-    if title_tag:
-        title = title_tag.text
-        title = title.replace('\n', '')
+    while True:
+        try:
+            search_data = get_search_results(query, PAGE_SIZE, offset_mark)
+        except Exception as e:
+            logging.error(f"Error during search: {e}")
+            break
 
-    subtitle_tag = main_wrapper.find('span', class_='quiet')
+        results = search_data.get('results', [])
+        if not results:
+            logging.info("No more results found.")
+            break
 
-    if subtitle_tag:
-        parts = subtitle_tag.text.split('-')
-        if len(parts) == 2:
-            date = parts[1].strip().replace(',', '').replace(')', '')
-            date = datetime.strptime(date, '%B %d %Y').strftime('%Y-%m-%d')
+        for result in results:
+            package_id = result.get('packageId')
+            if not package_id:
+                logging.warning("No packageId found in result. Skipping...")
+                continue
+            granules = get_granules(package_id)
+            for granule in granules:
+                granule_id = granule.get('granuleId')
+                if not granule_id:
+                    logging.warning(f"No granuleId found in granule: {granule}. Skipping...")
+                    continue
+                summary = get_granule_summary(package_id, granule_id)
+                if not summary:
+                    logging.warning(f"No summary available for granule {granule_id}. Skipping...")
+                    continue
+                record_title = summary.get('title', '').replace('\n', ' ').strip()
+                record_date = summary.get('dateIssued', '').strip()
+                htm_content = get_htm_content(package_id, granule_id)
+                if not htm_content:
+                    logging.warning(f"No HTM content for granule {granule_id}. Skipping...")
+                    continue
+                record_url = f"{BASE_API_URL}/packages/{package_id}/granules/{granule_id}/htm"
+                speeches = process_speech(record_url, record_date, record_title, htm_content)
+                if speeches:
+                    # Append to CSV using csv.DictWriter
+                    with open(output_file, 'a', encoding='utf-8', newline='') as f:
+                        writer = csv.DictWriter(f, fieldnames=["url", "date", "title", "speaker", "text"], delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
+                        for speech in speeches:
+                            writer.writerow(speech)
+                    total_results += len(speeches)
+                    logging.info(f"Total speeches collected: {total_results}")
+                    if max_results and total_results >= max_results:
+                        logging.info("Reached maximum number of results specified.")
+                        return
+        # Update offset_mark for next iteration
+        offset_mark = search_data.get('nextOffsetMark')
+        if not offset_mark:
+            logging.info("No more pages to fetch.")
+            break
 
-    txt_link_parent = page.find('li', class_='full-text-link')
-    if txt_link_parent is None:
-        print('Couldnt find text link')
-        raise StopIteration
-    txt_link = next(txt_link_parent.children).get('href')
-    yield from scrape_txt_record(txt_link, url, date, title)
+    logging.info(f"Scraping complete. Total speeches collected: {total_results}")
 
-
-def scrape_txt_record(txt_link, record_url, record_date, record_title, retries=3):
-    print(f'Fetching record from {BASE_URL}{txt_link}...')
-
-    response = requests.get(f'{BASE_URL}{txt_link}', proxies=PROXIES)
-
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as e:
-        print('Failed to scrape TXT record link. Reason: ' + str(e))
-        if retries and response.status_code == TOO_MANY_REQUESTS:
-            retry_time = fetch_retry_time(response)
-            time.sleep(retry_time)
-            yield from scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
-        elif retries:
-            print('Retrying...')
-            time.sleep(DEFAULT_RETRY_DELAY)
-            yield from scrape_txt_record(txt_link, record_url, record_date, record_title, retries=retries - 1)
-        else:
-            print('Out of retries, skipping TXT data...')
-        return
-
-    page = BeautifulSoup(response.text, 'html.parser')
-
-    record_text = page.find('pre')
-    if record_text is None:
-        print(f'Failed to find record text on link: {BASE_URL}{txt_link} . Skipping...')
-        raise StopIteration
-    record_text = record_text.text
-
-    print('Scraping record text for speakers...')
-    for speaker, text in speaker_scraper.scrape(record_text):
-        yield record_url, record_date, record_title, speaker, text
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('search_term',
-                        help='Return congressional records containing this term. '
-                             'For multi-word search terms, surround them in double quotation marks.')
-    parser.add_argument('output_file',
-                        help='Name of the output file')
-    parser.add_argument('-r', '--result-count',
-                        help='Max number of results you want (default: %(default)s)',
-                        default=9000, const=9000, type=int, nargs='?')
-    parser.add_argument('--start-congress',
-                        help='Beginning congress (inclusive) (default: %(default)s)',
-                        default=105, const=105, type=int, nargs='?')
-    parser.add_argument('--end-congress',
-                        help='End congress (inclusive) (default: %(default)s)',
-                        default=117, const=117, type=int, nargs='?')
-    parser.add_argument('--default-retry-delay',
-                        help='Default retry delay in seconds when an API call fail due to throttling.'
-                        '(default: %(default)s)',
-                        default=DEFAULT_RETRY_DELAY, const=DEFAULT_RETRY_DELAY, type=int, nargs='?')
-    parser.add_argument('--sort',
-                        default=PageSorts.ISSUE_DATE_ASCENDING.value,
-                        const=PageSorts.ISSUE_DATE_ASCENDING.value,
-                        nargs='?',
-                        choices=[v.value for v in PageSorts],
-                        help='Sort method for search results (default: %(default)s)')
-    parser.add_argument('--proxy', nargs='*')
-
-    # parser.add_argument('-fy', '--start_year',
-    #                     help='The starting date in your date range (it does not matter if the larger or smaller year comes first).')
-    # parser.add_argument('-ly', '--end_year',
-    #                     help='The ending date in your date range (it does not matter if the smaller or larger year comes first).')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Fetch congressional speeches from GovInfo API.')
+    parser.add_argument('output_file', help='Path to the output CSV file.')
+    parser.add_argument('--max-results', type=int, default=None,
+                        help='Maximum number of speeches to fetch. Default is all available.')
     args = parser.parse_args()
 
-    if args.proxy:
-        for proxy in args.proxy:
-            if '://' not in proxy:
-                print('Ignoring malformed proxy: %s' % proxy)
-                continue
-            protocol = proxy.split('://')[0]
-            PROXIES[protocol] = proxy
-            print('Using proxy: %s for protocol %s' % (proxy, protocol))
-
-    max_result_count = [ args.result_count ]  # Must be list to pass by reference
-    print('Max results specified: %d' % max_result_count[0])
-    page_count = 0
-    total_result_count = 0
-
-    DEFAULT_RETRY_DELAY = args.default_retry_delay
-    print('Retry delay is %d' % DEFAULT_RETRY_DELAY)
-
-    congress_range = list(range(args.start_congress, args.end_congress + 1))
-
-    # Reset/create file
-    with open(args.output_file, 'w+') as f:
-        pass
-
-    START_TIME = time.time()
-
-    while max_result_count[0] > 0:
-        num_page_results = 0
-        page_results = []
-        page_count += 1
-        old_search_count = max_result_count[0]
-
-        try:
-            for result in scrape_search_results(args.search_term, max_result_count, congress=congress_range, pageSort=args.sort, page_num=page_count):
-                if result is None:
-                    continue
-                url, date, title, speaker, text = result
-                text = text.replace('\n', ' ').replace('\t', ' ')
-                page_results.append({"url": url, "date": date, "title": title, "speaker": speaker, "text": text})
-                num_page_results += 1
-
-        except EndOfQueryException as e:
-            print(e)
-
-        if page_results:
-            df = pd.DataFrame(page_results)
-            df.set_index("url", inplace=True)
-            df.to_csv(args.output_file, sep='|', mode='a', header=page_count == 1)
-        else:
-            print('Got 0 speeches for page: %d' % page_count)
-
-        total_result_count += num_page_results
-
-        if max_result_count[0] <= 0:
-            break
-
-    print('Scraped: %d pages, %d individual records, %d individual speaker speeches.' % (page_count,
-                                                                                 args.result_count - max_result_count[0],
-                                                                                 total_result_count))
+    try:
+        main(args.output_file, args.max_results)
+    except KeyboardInterrupt:
+        logging.info("\nProcess interrupted by user. Exiting...")
+        sys.exit(0)
+    except Exception as e:
+        logging.error(f"An unexpected error occurred: {e}")
+        sys.exit(1)
