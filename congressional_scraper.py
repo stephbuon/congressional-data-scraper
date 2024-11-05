@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 
 # Constants
-API_KEY = 'A7azqIhchlSqg51zRYciPKu0k69V2EgFeyqRJRBL'  # Replace with your actual API key
+API_KEY = 'DEMO_KEY'  # Replace with your actual API key
 BASE_API_URL = 'https://api.govinfo.gov'
 CHRG_COLLECTION = 'CHRG'
 PAGE_SIZE = 1000  # Max allowed by GovInfo API
