@@ -25,8 +25,8 @@ API_KEY = 'DEMO_KEY'  # Replace with your actual API key
 BASE_API_URL = 'https://api.govinfo.gov'
 CHRG_COLLECTION = 'CHRG'
 PAGE_SIZE = 1000  # Max allowed by GovInfo API
-RETRY_DELAY = 60  # seconds
-MAX_RETRIES = 5
+RETRY_DELAY = 30  # seconds
+MAX_RETRIES = 3
 
 def get_search_results(query: str, page_size: int, offset_mark: Optional[str] = None) -> dict:
     search_url = f"{BASE_API_URL}/search"
@@ -35,7 +35,8 @@ def get_search_results(query: str, page_size: int, offset_mark: Optional[str] = 
         'Accept': 'application/json'
     }
     params = {
-        'api_key': API_KEY
+        'api_key': API_KEY,
+        "historical": True
     }
     payload = {
         "query": query,
@@ -43,11 +44,10 @@ def get_search_results(query: str, page_size: int, offset_mark: Optional[str] = 
         "offsetMark": offset_mark if offset_mark else "*",
         "sorts": [
             {
-                "field": "relevancy",
+                "field": "dateIssued",
                 "sortOrder": "DESC"
             }
         ],
-        "historical": True,
         "resultLevel": "default"
     }
 
@@ -208,7 +208,8 @@ def process_speech(record_url: str, record_date: str, record_title: str, htm_con
     return processed_speeches
 
 def main(output_file: str, max_results: Optional[int]):
-    query = f"collection:{CHRG_COLLECTION}"  # Removed 'hasText:true' to prevent 500 errors
+    #query = f"collection:{CHRG_COLLECTION} AND dateIssued:[2000-01-01 TO 2001-01-01]"
+    query = f"collection:{CHRG_COLLECTION}"
     offset_mark = None
     total_results = 0
 
