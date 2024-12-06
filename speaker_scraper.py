@@ -1,7 +1,7 @@
 import re
 
 SPEAKER_REGEX = re.compile(
-    r'(?:^  +(M[rs]\. [a-zA-Z]+[A-Z ]+\.)|(?:Chairman [a-zA-Z]+[A-Z ]+\.)|(?:Dr\. [a-zA-Z]+[A-Z ]+\.))',
+    r'(?:^  +(M(?:rs|r|s)\. [a-zA-Z]+[A-Z -]+\.)|(?:Chairman [a-zA-Z]+[A-Z -]+\.)|(?:Dr\. [a-zA-Z]+[A-Z -]+\.))',
     re.MULTILINE
 )
 
