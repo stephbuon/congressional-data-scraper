@@ -1,7 +1,25 @@
 import re
 
-SPEAKER_REGEX = re.compile(r'(?:^  +M[rs]. [a-zA-Z]+[A-Z ]+\.)|(?:^  +The [A-Z ]{2,}.)', re.MULTILINE)
+# Specific exceptions
+SPEAKER_REGEX = re.compile(
+    r'^  +'                            # Start of line with two spaces
+    r'(?:'                             # BEGIN big alternation
+    r'(?:M(?:r|rs|s)\.|Chairman|Chairwoman|Dr\.)\s'  # Title
+    r'[A-Z]{2,}(?:\s[A-Z]{2,})*'       # Name in ALL CAPS blocks (e.g. MEUSER, YOUNG KIM)
+    r'(?:\s(?:of\s[A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*))?'  # OPTIONAL: "of California" etc.
+    r'(?:\s\[continuing\])?\.'         # OPTIONAL: "[continuing]" before final period
+    r'|'                               # OR...
+    r'The CLERK\.'                     # "The CLERK."
+    r')',                              # END big alternation
+    re.MULTILINE
+)
 
+"""
+SPEAKER_REGEX = re.compile(
+    r'(?:^  +(M(?:rs|r|s)\. [a-zA-Z]+[A-Z -]+\.)|(?:Chairman [a-zA-Z]+[A-Z -]+\.)|(?:Dr\. [a-zA-Z]+[A-Z -]+\.))',
+    re.MULTILINE
+)
+"""
 
 def scrape(text):
     current_speaker = None
