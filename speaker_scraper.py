@@ -1,7 +1,28 @@
 import re
-
+# Currently registers end of speech at new speaker or end of document. Need to improve end of speech detection. 
 SPEAKER_REGEX = re.compile(
-    r'(?:^  +(M(?:rs|r|s)\. [a-zA-Z]+[A-Z -]+\.)|(?:Chairman [a-zA-Z]+[A-Z -]+\.)|(?:Dr\. [a-zA-Z]+[A-Z -]+\.))',
+    r'^ {2,}'
+    r'(?:'
+      r'(?:M(?:r|rs|s)\.|Chairman|Chairwoman|Dr\.)\s'
+      r'[A-Z](?:[a-z])?[A-Z]+(?:-[A-Z]+)*(?:\s[A-Z](?:[a-z])?[A-Z]+(?:-[A-Z]+)*)*'
+      r'(?:\s(?:of\s[A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*))?'
+      r'(?:\s\[continuing\])?'
+      r'(?:\s\([^)]*\))?\.'
+    r'|'
+      r'(?:'
+        r'The\s(?:'
+          r'CLERK'
+          r'|CHAIRMAN(?:\spro\stempore)?'
+          r'|PRESIDING\sOFFICER'
+          r'|SPEAKER(?:\spro\stempore)?'
+          r'|VICE\sPRESIDENT'
+          r'|PRESIDENT\spro\stempore'
+          r'|ACTING\sPRESIDENT\spro\stempore'
+        r')'
+        r'(?:\s\([^)]*\))?'
+        r'\.'
+      r')'
+    r')',
     re.MULTILINE
 )
 
