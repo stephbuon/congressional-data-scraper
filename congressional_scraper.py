@@ -1,289 +1,329 @@
 import argparse
+import os
+import sys
 import time
-import json
+import csv
+import logging
+import threading
+from datetime import date, datetime, timedelta
+from typing import Optional, List
+
 import requests
 from bs4 import BeautifulSoup
-import pandas as pd
-from datetime import datetime
-from typing import Optional, List
-import speaker_scraper  # Ensure this module is available
-import sys
-import logging
-import csv  # Import csv module for quoting
+import speaker_scraper
 
-# Configure logging
+# ------------------- Configuration -------------------
+BASE_API_URL        = 'https://api.govinfo.gov'
+PAGE_SIZE           = 1000
+RETRY_DELAY         = 15    # seconds on 429
+MAX_RETRIES         = 3
+# these get initialized once we see the first rate‐limit header:
+RATE_LIMIT_PER_HOUR = None
+RATE_INTERVAL       = None   # seconds between calls
+
+# only log headers every N seconds
+HEADER_LOG_INTERVAL   = 300.0   # seconds
+_last_header_log_time = 0.0
+_header_log_lock      = threading.Lock()
+
+# ------------------- Logging Setup -------------------
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s: %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[handler]
 )
 
-# Constants
-API_KEY = 'DEMO_KEY'  # Replace with your actual API key
-BASE_API_URL = 'https://api.govinfo.gov'
-CHRG_COLLECTION = 'CHRG'
-PAGE_SIZE = 1000  # Max allowed by GovInfo API
-RETRY_DELAY = 30  # seconds
-MAX_RETRIES = 3
+# ------------------- Global state -------------------
+rate_lock      = threading.Lock()
+last_call_time = 0.0
+summary_lock   = threading.Lock()
+raw_lock       = threading.Lock()
 
-def get_search_results(query: str, page_size: int, offset_mark: Optional[str] = None) -> dict:
-    search_url = f"{BASE_API_URL}/search"
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-    params = {
-        'api_key': API_KEY,
-        "historical": True
-    }
+# Single API key
+API_KEY = 'DEMO_KEY'
+
+def get_api_key() -> str:
+    return API_KEY
+
+def rate_limit():
+    """Sleep as needed to enforce the aggregate calls/hour limit."""
+    global last_call_time, RATE_INTERVAL
+    if RATE_INTERVAL is None:
+        return    # not yet initialized
+    with rate_lock:
+        now = time.time()
+        to_wait = RATE_INTERVAL - (now - last_call_time)
+        if to_wait > 0:
+            time.sleep(to_wait)
+        last_call_time = time.time()
+
+# ------------------- GovInfo Helpers -------------------
+
+def get_search_results(query: str, page_size: int, offset_mark: Optional[str]=None) -> dict:
+    global _last_header_log_time, RATE_LIMIT_PER_HOUR, RATE_INTERVAL
+    rate_limit()
+    url = f"{BASE_API_URL}/search"
+    headers = {'Content-Type':'application/json','Accept':'application/json'}
+    params  = {'api_key': get_api_key(), 'historical': True}
     payload = {
-        "query": query,
-        "pageSize": page_size,
-        "offsetMark": offset_mark if offset_mark else "*",
-        "sorts": [
-            {
-                "field": "dateIssued",
-                "sortOrder": "DESC"
-            }
-        ],
-        "resultLevel": "default"
+        'query': query,
+        'pageSize': page_size,
+        'offsetMark': offset_mark or '*',
+        'sorts':[{'field':'publishdate','sortOrder':'DESC'}],
+        'resultLevel':'default'
     }
 
-    logging.info(f"Sending POST request to {search_url} with payload: {json.dumps(payload)[:500]}...")  # Truncated for readability
+    for attempt in range(1, MAX_RETRIES+1):
+        resp = requests.post(url, headers=headers, params=params, json=payload)
+        if resp.status_code == 429:
+            wait = int(resp.headers.get('Retry-After', RETRY_DELAY))
+            logging.warning(f"429 rate limit, sleeping {wait}s…")
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            response = requests.post(search_url, headers=headers, params=params, json=payload)
-            if response.status_code == 429:
-                retry_after = int(response.headers.get('Retry-After', RETRY_DELAY))
-                logging.warning(f"Rate limited (429). Retrying after {retry_after} seconds...")
-                time.sleep(retry_after)
-                continue
-            response.raise_for_status()
-            logging.info("Search request successful.")
-            return response.json()
-        except requests.exceptions.HTTPError as e:
-            logging.error(f"HTTPError on attempt {attempt}: {e}")
-            logging.error(f"Response Body: {response.text}")  # Log response body for debugging
-            if attempt < MAX_RETRIES:
-                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
-                time.sleep(RETRY_DELAY)
-            else:
-                logging.error("Max retries reached. Exiting search.")
-                raise
-        except Exception as e:
-            logging.error(f"Unexpected error on attempt {attempt}: {e}")
-            if attempt < MAX_RETRIES:
-                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
-                time.sleep(RETRY_DELAY)
-            else:
-                logging.error("Max retries reached. Exiting search.")
-                raise
+        now = time.time()
+        with _header_log_lock:
+            if now - _last_header_log_time >= HEADER_LOG_INTERVAL:
+                limit_hdr     = resp.headers.get('X-RateLimit-Limit')
+                remaining_hdr = resp.headers.get('X-RateLimit-Remaining')
+                logging.info(f"API rate limit header: limit={limit_hdr}, remaining={remaining_hdr}")
+                _last_header_log_time = now
+                if limit_hdr:
+                    per_key = int(limit_hdr)
+                    RATE_LIMIT_PER_HOUR = per_key
+                    RATE_INTERVAL = 3600.0 / RATE_LIMIT_PER_HOUR
+                    logging.info(f"Rate limit {RATE_LIMIT_PER_HOUR}/hr → interval {RATE_INTERVAL:.3f}s")
+
+        return resp.json()
+
+    raise RuntimeError("Max retries exceeded for search")
+
 
 def get_granules(package_id: str) -> List[dict]:
-    granules_url = f"{BASE_API_URL}/packages/{package_id}/granules"
-    params = {
-        'api_key': API_KEY,
-        'pageSize': PAGE_SIZE,
-        'offsetMark': '*'
-    }
-    granules = []
+    all_g = []
+    url   = f"{BASE_API_URL}/packages/{package_id}/granules"
+    params= {'api_key': get_api_key(), 'pageSize': PAGE_SIZE, 'offsetMark': '*'}
     while True:
-        logging.info(f"Fetching granules from {granules_url} with params {params}")
-        try:
-            response = requests.get(granules_url, params=params)
-            if response.status_code == 429:
-                retry_after = int(response.headers.get('Retry-After', RETRY_DELAY))
-                logging.warning(f"Rate limited while fetching granules (429). Retrying after {retry_after} seconds...")
-                time.sleep(retry_after)
-                continue
-            response.raise_for_status()
-            data = response.json()
-            fetched_granules = data.get('granules', [])
-            granules.extend(fetched_granules)
-            logging.info(f"Fetched {len(fetched_granules)} granules.")
-            if 'nextOffsetMark' in data:
-                params['offsetMark'] = data['nextOffsetMark']
-            else:
-                break
-        except requests.exceptions.HTTPError as e:
-            logging.error(f"HTTPError while fetching granules: {e}")
-            logging.error(f"Response Body: {response.text}")  # Log response body for debugging
+        rate_limit()
+        resp = requests.get(url, params=params)
+        if resp.status_code == 429:
+            wait = int(resp.headers.get('Retry-After', RETRY_DELAY))
+            logging.warning(f"429 granules limit, sleeping {wait}s…")
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        data = resp.json()
+        all_g.extend(data.get('granules', []))
+        nxt = data.get('nextOffsetMark')
+        if not nxt:
             break
-        except Exception as e:
-            logging.error(f"Unexpected error while fetching granules: {e}")
-            break
-    return granules
+        params['offsetMark'] = nxt
+    return all_g
 
-def get_granule_summary(package_id: str, granule_id: str) -> dict:
-    summary_url = f"{BASE_API_URL}/packages/{package_id}/granules/{granule_id}/summary"
-    params = {
-        'api_key': API_KEY
-    }
-    logging.info(f"Fetching granule summary from {summary_url}")
-    for attempt in range(1, MAX_RETRIES + 1):
+
+def get_granule_summary(pkg: str, gran: str) -> dict:
+    url    = f"{BASE_API_URL}/packages/{pkg}/granules/{gran}/summary"
+    params = {'api_key': get_api_key()}
+    for attempt in range(1, MAX_RETRIES+1):
+        rate_limit()
+        resp = requests.get(url, params=params)
+        if resp.status_code == 429:
+            time.sleep(RETRY_DELAY)
+            continue
         try:
-            response = requests.get(summary_url, params=params)
-            if response.status_code == 429:
-                retry_after = int(response.headers.get('Retry-After', RETRY_DELAY))
-                logging.warning(f"Rate limited while fetching granule summary (429). Retrying after {retry_after} seconds...")
-                time.sleep(retry_after)
-                continue
-            response.raise_for_status()
-            logging.info("Granule summary fetched successfully.")
-            return response.json()
-        except requests.exceptions.HTTPError as e:
-            logging.error(f"HTTPError on attempt {attempt} while fetching granule summary: {e}")
-            logging.error(f"Response Body: {response.text}")  # Log response body for debugging
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.HTTPError:
             if attempt < MAX_RETRIES:
-                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
                 time.sleep(RETRY_DELAY)
             else:
-                logging.error("Max retries reached for granule summary. Skipping this granule.")
                 return {}
-        except Exception as e:
-            logging.error(f"Unexpected error on attempt {attempt} while fetching granule summary: {e}")
-            if attempt < MAX_RETRIES:
-                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
-                time.sleep(RETRY_DELAY)
-            else:
-                logging.error("Max retries reached for granule summary. Skipping this granule.")
-                return {}
+    return {}
 
-def get_htm_content(package_id: str, granule_id: str) -> str:
-    htm_url = f"{BASE_API_URL}/packages/{package_id}/granules/{granule_id}/htm"
-    params = {
-        'api_key': API_KEY
-    }
-    logging.info(f"Fetching HTM content from {htm_url}")
-    for attempt in range(1, MAX_RETRIES + 1):
+
+def get_htm(pkg: str, gran: str) -> str:
+    url    = f"{BASE_API_URL}/packages/{pkg}/granules/{gran}/htm"
+    params = {'api_key': get_api_key()}
+    for attempt in range(1, MAX_RETRIES+1):
+        rate_limit()
+        resp = requests.get(url, params=params)
+        if resp.status_code == 429:
+            time.sleep(RETRY_DELAY)
+            continue
         try:
-            response = requests.get(htm_url, params=params)
-            if response.status_code == 429:
-                retry_after = int(response.headers.get('Retry-After', RETRY_DELAY))
-                logging.warning(f"Rate limited while fetching HTM content (429). Retrying after {retry_after} seconds...")
-                time.sleep(retry_after)
-                continue
-            response.raise_for_status()
-            logging.info("HTM content fetched successfully.")
-            return response.text
-        except requests.exceptions.HTTPError as e:
-            logging.error(f"HTTPError on attempt {attempt} while fetching HTM content: {e}")
-            logging.error(f"Response Body: {response.text}")  # Log response body for debugging
+            resp.raise_for_status()
+            return resp.text
+        except requests.exceptions.HTTPError:
             if attempt < MAX_RETRIES:
-                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
                 time.sleep(RETRY_DELAY)
             else:
-                logging.error("Max retries reached for HTM content. Skipping this granule.")
-                return ""
-        except Exception as e:
-            logging.error(f"Unexpected error on attempt {attempt} while fetching HTM content: {e}")
-            if attempt < MAX_RETRIES:
-                logging.info(f"Retrying in {RETRY_DELAY} seconds...")
-                time.sleep(RETRY_DELAY)
-            else:
-                logging.error("Max retries reached for HTM content. Skipping this granule.")
-                return ""
+                return ''
+    return ''
 
-def process_speech(record_url: str, record_date: str, record_title: str, htm_content: str):
-    soup = BeautifulSoup(htm_content, 'html.parser')
-    pre_tag = soup.find('pre')
-    if not pre_tag:
-        logging.warning(f"No <pre> tag found in {record_url}. Skipping...")
+# ------------------- Speech Processing -------------------
+
+def extract_pre_text(html: str) -> Optional[str]:
+    soup = BeautifulSoup(html, 'html.parser')
+    pres  = soup.find_all('pre')
+    if not pres:
+        return None
+
+    texts = [p.get_text() for p in pres if p.get_text().strip()]
+    return "\n\n".join(texts) if texts else None
+
+
+def process_speeches(url: str, date_str: str, title: str, html: str):
+    txt = extract_pre_text(html)
+    if not txt:
         return []
-    record_text = pre_tag.get_text()
-    speeches = speaker_scraper.scrape(record_text)
-    processed_speeches = []
-    for speaker, text in speeches:
-        text = text.replace('\n', ' ').replace('\t', ' ').strip()
-        processed_speeches.append({
-            "url": record_url,
-            "date": record_date,
-            "title": record_title,
-            "speaker": speaker,
-            "text": text
+    parts = speaker_scraper.scrape(txt)
+    out   = []
+    for speaker, body in parts:
+        clean = body.replace('\n',' ').replace('\t',' ').strip()
+        out.append({
+            'url':     url,
+            'date':    date_str,
+            'title':   title,
+            'speaker': speaker,
+            'text':    clean
         })
-    return processed_speeches
+    return out
 
-def main(output_file: str, max_results: Optional[int]):
-    #query = f"collection:{CHRG_COLLECTION} AND dateIssued:[2000-01-01 TO 2001-01-01]"
-    query = f"collection:{CHRG_COLLECTION}"
-    offset_mark = None
-    total_results = 0
+# ------------------- Worker for one day -------------------
 
-    # Initialize CSV with header using comma delimiter
-    with open(output_file, 'w', encoding='utf-8', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=["url", "date", "title", "speaker", "text"], delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
+def scrape_day(year: int, month: int, day: int, workers: int, output_dir: str):
+    d = date(year, month, day)
+    day_str = d.isoformat()
+    logging.info(f"=== Starting scrape for {day_str} ===")
+
+    query = f"{BASE_QUERY} AND publishdate:range({day_str},{day_str})"
+    offset = None
+    pkg_ids = set()
+    while True:
+        try:
+            data = get_search_results(query, PAGE_SIZE, offset)
+        except Exception as e:
+            logging.error(f"Search for {day_str} failed: {e}")
+            return
+        for res in data.get('results', []):
+            pkg = res.get('packageId')
+            if pkg:
+                pkg_ids.add(pkg)
+        offset = data.get('nextOffsetMark')
+        if not offset:
+            break
+
+    if not pkg_ids:
+        logging.info(f"No packages for {day_str} — skipping.")
+    else:
+        scraped_dir = os.path.join(output_dir, 'scraped_output')
+        raw_dir     = os.path.join(output_dir, 'raw_output')
+        os.makedirs(scraped_dir, exist_ok=True)
+        os.makedirs(raw_dir, exist_ok=True)
+
+        daily_csv  = os.path.join(scraped_dir, f"{day_str}.csv")
+        daily_raw  = os.path.join(raw_dir,     f"{day_str}.html")
+
+        def work_pkg(pkg):
+            for gran in get_granules(pkg):
+                gid = gran.get('granuleId')
+                if not gid:
+                    continue
+
+                meta  = get_granule_summary(pkg, gid)
+                title = meta.get('title','').replace('\n',' ').strip()
+                dstr  = meta.get('dateIssued','').strip()
+                if not title or not dstr:
+                    continue
+
+                try:
+                    rec_date = datetime.fromisoformat(dstr).date()
+                except ValueError:
+                    continue
+                if rec_date != d:
+                    continue
+
+                url  = f"{BASE_API_URL}/packages/{pkg}/granules/{gid}/htm"
+                html = get_htm(pkg, gid)
+
+                with raw_lock:
+                    with open(daily_raw, 'a', encoding='utf-8') as rf:
+                        rf.write(f"\n\n=== PACKAGE {pkg} | GRANULE {gid} ===\n")
+                        rf.write(html)
+
+                speeches = process_speeches(url, dstr, title, html)
+                with summary_lock:
+                    with open(SUMMARY_CSV, 'a', newline='', encoding='utf-8') as sf:
+                        writer = csv.DictWriter(sf, fieldnames=['date','title','has_speech'])
+                        writer.writerow({
+                            'date':      dstr,
+                            'title':     title,
+                            'has_speech': bool(speeches)
+                        })
+                    write_header = not os.path.exists(daily_csv)
+                    with open(daily_csv, 'a', newline='', encoding='utf-8') as mf:
+                        mw = csv.DictWriter(mf, fieldnames=['url','date','title','speaker','text'])
+                        if write_header:
+                            mw.writeheader()
+                        mw.writerows(speeches)
+
+        # sequential processing (no parallel)
+        for pkg in pkg_ids:
+            work_pkg(pkg)
+
+    comp_file = os.path.join(output_dir, 'completed_days.txt')
+    with open(comp_file, 'a', encoding='utf-8') as cf:
+        cf.write(day_str + "\n")
+    logging.info(f"=== Finished scrape for {day_str} ===\n")
+
+# ------------------- Main -------------------
+
+def main(output_dir: str, years: int, workers: int):
+    global SUMMARY_CSV, BASE_QUERY
+
+    OUTPUT_DIR  = output_dir
+    SCRAPED_DIR = os.path.join(OUTPUT_DIR, 'scraped_output')
+    SUMMARY_CSV = os.path.join(OUTPUT_DIR, 'summary.csv')
+    BASE_QUERY  = "collection:CREC AND docClass:CREC AND (section:House OR section:Senate)"
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(SCRAPED_DIR, exist_ok=True)
+
+    with open(SUMMARY_CSV, 'w', newline='', encoding='utf-8') as sf:
+        writer = csv.DictWriter(sf, fieldnames=['date','title','has_speech'])
         writer.writeheader()
 
-    while True:
-        try:
-            search_data = get_search_results(query, PAGE_SIZE, offset_mark)
-        except Exception as e:
-            logging.error(f"Error during search: {e}")
-            break
+    open(os.path.join(OUTPUT_DIR, 'completed_days.txt'), 'w').close()
 
-        results = search_data.get('results', [])
-        if not results:
-            logging.info("No more results found.")
-            break
+    end   = date.today() - timedelta(days=1)
+    start = date(end.year - years, end.month, end.day)
+    days  = []
+    cur   = end
+    while cur >= start:
+        days.append(cur)
+        cur -= timedelta(days=1)
 
-        for result in results:
-            package_id = result.get('packageId')
-            if not package_id:
-                logging.warning("No packageId found in result. Skipping...")
-                continue
-            granules = get_granules(package_id)
-            for granule in granules:
-                granule_id = granule.get('granuleId')
-                if not granule_id:
-                    logging.warning(f"No granuleId found in granule: {granule}. Skipping...")
-                    continue
-                summary = get_granule_summary(package_id, granule_id)
-                if not summary:
-                    logging.warning(f"No summary available for granule {granule_id}. Skipping...")
-                    continue
-                record_title = summary.get('title', '').replace('\n', ' ').strip()
-                record_date = summary.get('dateIssued', '').strip()
-                htm_content = get_htm_content(package_id, granule_id)
-                if not htm_content:
-                    logging.warning(f"No HTM content for granule {granule_id}. Skipping...")
-                    continue
-                record_url = f"{BASE_API_URL}/packages/{package_id}/granules/{granule_id}/htm"
-                speeches = process_speech(record_url, record_date, record_title, htm_content)
-                if speeches:
-                    # Append to CSV using csv.DictWriter
-                    with open(output_file, 'a', encoding='utf-8', newline='') as f:
-                        writer = csv.DictWriter(f, fieldnames=["url", "date", "title", "speaker", "text"], delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
-                        for speech in speeches:
-                            writer.writerow(speech)
-                    total_results += len(speeches)
-                    logging.info(f"Total speeches collected: {total_results}")
-                    if max_results and total_results >= max_results:
-                        logging.info("Reached maximum number of results specified.")
-                        return
-        # Update offset_mark for next iteration
-        offset_mark = search_data.get('nextOffsetMark')
-        if not offset_mark:
-            logging.info("No more pages to fetch.")
-            break
+    logging.info(f"Will process {len(days)} days, sequentially.")
+    for d in days:
+        scrape_day(d.year, d.month, d.day, workers, OUTPUT_DIR)
 
-    logging.info(f"Scraping complete. Total speeches collected: {total_results}")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Fetch congressional speeches from GovInfo API.')
-    parser.add_argument('output_file', help='Path to the output CSV file.')
-    parser.add_argument('--max-results', type=int, default=None,
-                        help='Maximum number of speeches to fetch. Default is all available.')
-    args = parser.parse_args()
+if __name__ == '__main__':
+    p = argparse.ArgumentParser(
+        description="Day-by-day CREC scraper w/ raw dumps (single key)"
+    )
+    p.add_argument('output_folder', help="Where to write output")
+    p.add_argument('--years',     type=int, default=2, help="How many years back to go")
+    p.add_argument('--workers',   type=int, default=1, help="(Unused) threads per day")
+    args = p.parse_args()
 
     try:
-        main(args.output_file, args.max_results)
+        main(args.output_folder, args.years, args.workers)
     except KeyboardInterrupt:
-        logging.info("\nProcess interrupted by user. Exiting...")
+        logging.info("Interrupted by user—exiting.")
         sys.exit(0)
     except Exception as e:
-        logging.error(f"An unexpected error occurred: {e}")
+        logging.exception(f"Fatal error: {e}")
         sys.exit(1)
