@@ -11,7 +11,6 @@ import xml.etree.ElementTree as ET
 
 import requests
 from bs4 import BeautifulSoup
-from concurrent.futures import ThreadPoolExecutor
 import speaker_scraper
 
 # ------------------- Configuration -------------------
@@ -21,7 +20,7 @@ RETRY_DELAY         = 15    # seconds on 429
 MAX_RETRIES         = 3
 
 # specify an API key here
-demo_key = 'YOUR_DEMO_KEY'
+demo_key = 'YOUR_KEY'
 
 # these get initialized once we see the first rate-limit header:
 RATE_LIMIT_PER_HOUR: Optional[int] = None
@@ -100,7 +99,6 @@ def get_search_results(query: str, page_size: int, offset_mark: Optional[str]=No
         return resp.json()
     raise RuntimeError("Max retries exceeded for search")
 
-
 def get_granules(package_id: str) -> List[dict]:
     all_g = []
     url   = f"{BASE_API_URL}/packages/{package_id}/granules"
@@ -122,7 +120,6 @@ def get_granules(package_id: str) -> List[dict]:
         params['offsetMark'] = nxt
     return all_g
 
-
 def get_granule_summary(pkg: str, gran: str) -> dict:
     url    = f"{BASE_API_URL}/packages/{pkg}/granules/{gran}/summary"
     params = {'api_key': get_api_key()}
@@ -142,7 +139,6 @@ def get_granule_summary(pkg: str, gran: str) -> dict:
                 return {}
     return {}
 
-
 def get_htm(pkg: str, gran: str) -> str:
     url    = f"{BASE_API_URL}/packages/{pkg}/granules/{gran}/htm"
     params = {'api_key': get_api_key()}
@@ -161,7 +157,6 @@ def get_htm(pkg: str, gran: str) -> str:
             else:
                 return ''
     return ''
-
 
 def get_mods(pkg: str, gran: str) -> str:
     """
@@ -193,7 +188,6 @@ def extract_pre_text(html: str) -> Optional[str]:
         return None
     texts = [p.get_text() for p in pres if p.get_text().strip()]
     return "\n\n".join(texts) if texts else None
-
 
 def process_speeches(html: str) -> List[Dict[str, Any]]:
     txt = extract_pre_text(html)
@@ -243,7 +237,7 @@ def parse_congmember_metadata(mods_xml: str) -> List[Dict[str, str]]:
     return meta_list
 
 # ------------------- Worker for one day -------------------
-def scrape_day(year: int, month: int, day: int, workers: int, output_dir: str):
+def scrape_day(year: int, month: int, day: int, output_dir: str):
     d       = date(year, month, day)
     day_str = d.isoformat()
     logging.info(f"=== Starting scrape for {day_str} ===")
@@ -275,7 +269,7 @@ def scrape_day(year: int, month: int, day: int, workers: int, output_dir: str):
         logging.info(f"No packages for {day_str} — skipping.")
         return
 
-    def work_pkg(pkg: str):
+    for pkg in pkg_ids:
         for gran in get_granules(pkg):
             gid = gran.get('granuleId')
             if not gid:
@@ -286,7 +280,6 @@ def scrape_day(year: int, month: int, day: int, workers: int, output_dir: str):
                 continue
 
             chamber_value = 'House' if section == 'house' else 'Senate'
-
             html = get_htm(pkg, gid)
             if not html:
                 continue
@@ -354,17 +347,10 @@ def scrape_day(year: int, month: int, day: int, workers: int, output_dir: str):
                         writer.writeheader()
                     writer.writerows(enriched_rows)
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        for pkg in pkg_ids:
-            pool.submit(work_pkg, pkg)
-
     logging.info(f"=== Finished scrape for {day_str} ===\n")
 
 # ------------------- Main -------------------
-def main(output_dir: str,
-         years: int,
-         workers: int,
-         year_start: Optional[int] = None):
+def main(output_dir: str, years: int, year_start: Optional[int] = None):
     global BASE_QUERY
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(os.path.join(output_dir, 'raw_output'), exist_ok=True)
@@ -382,20 +368,19 @@ def main(output_dir: str,
         days.append(cur)
         cur -= timedelta(days=1)
 
-    logging.info(f"Will process {len(days)} days, {workers} workers/day.")
+    logging.info(f"Will process {len(days)} days.")
     for d in days:
-        scrape_day(d.year, d.month, d.day, workers, output_dir)
+        scrape_day(d.year, d.month, d.day, output_dir)
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description="CREC scraper with speaker-metadata cross-reference")
     p.add_argument('output_folder', help="Where to write output")
     p.add_argument('--years',     type=int, default=2, help="How many years back to go")
     p.add_argument('--year-start', type=int, help="Optional starting year (e.g. 1995) for the first scrape date")
-    p.add_argument('--workers',   type=int, default=4, help="Threads per day")
     args = p.parse_args()
 
     try:
-        main(args.output_folder, args.years, args.workers, args.year_start)
+        main(args.output_folder, args.years, args.year_start)
     except KeyboardInterrupt:
         logging.info("Interrupted by user—exiting.")
         sys.exit(0)
